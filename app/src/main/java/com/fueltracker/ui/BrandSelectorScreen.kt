@@ -33,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -47,7 +48,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -56,16 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fueltracker.data.CarBrand
 import com.fueltracker.data.CarDatabase
-import com.fueltracker.ui.miui.MuiXCardColor
 import kotlinx.coroutines.launch
-
-// MIUI 配色定义
-private val MuiXBgColor = Color(0xFFF4F4F6)
-private val MuiXPrimaryColor = Color(0xFF3482FF)
-private val MuiXTextPrimary = Color(0xFF191919)
-val MuiXTextSecondary = Color(0xFF8C8C8C)
-private val MuiXDividerColor = Color(0xFFF0F0F3)
-private val MuiXSearchBg = Color(0xFFEBECEF)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -88,15 +79,13 @@ fun BrandSelectorScreen(
 
     LaunchedEffect(Unit) {
         carDatabase.ensureCatalogLoaded()
-        // 从 catalog 展开成你现有的 CarBrand 列表格式
-        val list = carDatabase.brandsByLetter().flatMap { (L, brands) ->
-            brands.map { CarBrand(it, L) }
+        val list = carDatabase.brandsByLetter().flatMap { (l, brands) ->
+            brands.map { CarBrand(it, l) }
         }
         allBrands = list
         isLoading = false
     }
 
-    // 2. 搜索逻辑过滤
     val filteredBrands = remember(searchText, allBrands) {
         val list = if (searchText.isBlank()) {
             allBrands
@@ -111,20 +100,19 @@ fun BrandSelectorScreen(
 
     val letters = remember(filteredBrands) { filteredBrands.keys.toList() }
 
-    // 3. 计算每个字母 Header 在 LazyColumn 中的真实位置
-    // ★ 关键修改：因为顶部增加了一个手动输入的 item，所以初始索引为 1
+    // ★ 顶部有一个手动输入 item, 所以初始索引从 1 开始
     val letterIndexMap = remember(filteredBrands) {
         val map = mutableMapOf<String, Int>()
         var currentIndex = 1
         filteredBrands.forEach { (letter, brands) ->
             map[letter] = currentIndex
-            currentIndex += 1 + brands.size // 1 个字母 Header + N 个品牌 Item
+            currentIndex += 1 + brands.size
         }
         map
     }
 
     Scaffold(
-        containerColor = MuiXBgColor,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -132,7 +120,7 @@ fun BrandSelectorScreen(
                         text = "选择品牌",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MuiXTextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
@@ -140,11 +128,13 @@ fun BrandSelectorScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
-                            tint = MuiXTextPrimary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MuiXBgColor)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -155,7 +145,7 @@ fun BrandSelectorScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = MuiXPrimaryColor)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else {
             Row(
@@ -163,9 +153,7 @@ fun BrandSelectorScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                // 左侧主内容区
                 Column(modifier = Modifier.weight(1f)) {
-                    // MIUI 风格搜索框
                     MuiXSearchBox(
                         value = searchText,
                         onValueChange = { searchText = it },
@@ -187,14 +175,16 @@ fun BrandSelectorScreen(
                                 Text(
                                     text = "未找到相关品牌",
                                     fontSize = 15.sp,
-                                    color = MuiXTextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
 
                                 if (searchText.isNotBlank()) {
                                     Button(
                                         onClick = { onManualInput(searchText.trim()) },
                                         shape = RoundedCornerShape(20.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MuiXPrimaryColor)
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary
+                                        )
                                     ) {
                                         Text(text = "使用手动输入 \"$searchText\"")
                                     }
@@ -206,23 +196,21 @@ fun BrandSelectorScreen(
                             state = listState,
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            // ==========================================
-                            // ★ 1. 放在字母 A 上方的手动输入卡片
-                            // ==========================================
+                            // 手动输入品牌卡片
                             item(key = "manual_input_header") {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 8.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(MuiXCardColor)
+                                        .background(MaterialTheme.colorScheme.surface)
                                         .padding(12.dp)
                                 ) {
                                     Text(
                                         text = "手动输入品牌",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = MuiXPrimaryColor
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Row(
@@ -234,14 +222,14 @@ fun BrandSelectorScreen(
                                             onValueChange = { customBrandInput = it },
                                             textStyle = TextStyle(
                                                 fontSize = 14.sp,
-                                                color = MuiXTextPrimary
+                                                color = MaterialTheme.colorScheme.onSurface
                                             ),
                                             singleLine = true,
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(38.dp)
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(MuiXSearchBg)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                                 .padding(horizontal = 10.dp),
                                             decorationBox = { innerTextField ->
                                                 Box(contentAlignment = Alignment.CenterStart) {
@@ -249,7 +237,7 @@ fun BrandSelectorScreen(
                                                         Text(
                                                             text = "未找到品牌？在此直接输入",
                                                             fontSize = 13.sp,
-                                                            color = MuiXTextSecondary
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
                                                     }
                                                     innerTextField()
@@ -265,7 +253,9 @@ fun BrandSelectorScreen(
                                             },
                                             enabled = customBrandInput.isNotBlank(),
                                             shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = MuiXPrimaryColor),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.primary
+                                            ),
                                             modifier = Modifier.height(38.dp)
                                         ) {
                                             Text(text = "确定", fontSize = 13.sp)
@@ -274,23 +264,20 @@ fun BrandSelectorScreen(
                                 }
                             }
 
-                            // ==========================================
-                            // 2. 按字母 A-Z 分组的品牌列表
-                            // ==========================================
+                            // A-Z 分组品牌列表
                             filteredBrands.forEach { (letter, brands) ->
-                                // 字母分组标题（支持吸顶）
                                 stickyHeader(key = letter) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(MuiXBgColor)
+                                            .background(MaterialTheme.colorScheme.background)
                                             .padding(horizontal = 20.dp, vertical = 6.dp)
                                     ) {
                                         Text(
                                             text = letter,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = MuiXPrimaryColor
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
@@ -302,7 +289,7 @@ fun BrandSelectorScreen(
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(MuiXCardColor)
+                                            .background(MaterialTheme.colorScheme.surface)
                                     ) {
                                         Box(
                                             modifier = Modifier
@@ -313,12 +300,18 @@ fun BrandSelectorScreen(
                                             Text(
                                                 text = brand.brand,
                                                 fontSize = 16.sp,
-                                                color = if (brand.brand == initialBrand) MuiXPrimaryColor else MuiXTextPrimary,
-                                                fontWeight = if (brand.brand == initialBrand) FontWeight.Bold else FontWeight.Normal
+                                                color = if (brand.brand == initialBrand)
+                                                    MaterialTheme.colorScheme.primary
+                                                else
+                                                    MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = if (brand.brand == initialBrand)
+                                                    FontWeight.Bold
+                                                else
+                                                    FontWeight.Normal
                                             )
                                         }
                                         HorizontalDivider(
-                                            color = MuiXDividerColor,
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
                                             thickness = 0.8.dp,
                                             modifier = Modifier.padding(start = 20.dp)
                                         )
@@ -344,7 +337,7 @@ fun BrandSelectorScreen(
                                 text = letter,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MuiXTextSecondary,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .clickable {
@@ -379,7 +372,7 @@ private fun MuiXSearchBox(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .height(42.dp)
             .clip(RoundedCornerShape(21.dp))
-            .background(MuiXSearchBg)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -390,7 +383,7 @@ private fun MuiXSearchBox(
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
-                tint = MuiXTextSecondary,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
 
@@ -401,7 +394,7 @@ private fun MuiXSearchBox(
                 onValueChange = onValueChange,
                 textStyle = TextStyle(
                     fontSize = 14.sp,
-                    color = MuiXTextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 ),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -412,7 +405,7 @@ private fun MuiXSearchBox(
                             Text(
                                 text = placeholder,
                                 fontSize = 14.sp,
-                                color = MuiXTextSecondary
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         innerTextField()
@@ -428,7 +421,7 @@ private fun MuiXSearchBox(
                     Icon(
                         imageVector = Icons.Default.Clear,
                         contentDescription = "清除",
-                        tint = MuiXTextSecondary,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                 }

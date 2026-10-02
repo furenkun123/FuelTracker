@@ -24,10 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.LocalGasStation
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
@@ -52,8 +52,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.fueltracker.data.FuelRecord
 import com.fueltracker.data.Vehicle
 import com.fueltracker.util.ConsumptionResult
@@ -64,15 +66,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material3.MaterialTheme
 
-// MIUI / HyperOS 规范配色
-private val MiuiBackground = Color(0xFFF5F5F7)
-private val MiuiCard = Color(0xFFFFFFFF)
-private val MiuiBlue = Color(0xFF007AFF)
-private val MiuiTextPrimary = Color(0xFF1C1C1E)
-private val MiuiGray = Color(0xFF8E8E93)
-private val MiuiLightGray = Color(0xFFE5E5EA)
-private val MiuiTagBg = Color(0xFFEBF3FF)
 
 private val recordDateFormat by lazy {
     SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -137,7 +132,7 @@ fun RecordsScreen(
     }
 
     Scaffold(
-        containerColor = MiuiBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -145,7 +140,7 @@ fun RecordsScreen(
                         text = "全部加油记录",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 18.sp,
-                        color = MiuiTextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
@@ -153,11 +148,11 @@ fun RecordsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
-                            tint = MiuiTextPrimary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MiuiBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
@@ -248,7 +243,6 @@ private fun MiuixCard(
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .then(modifier),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MiuiCard),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()
@@ -291,46 +285,46 @@ private fun RecordStatistics(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(text = "次数", color = MiuiGray, fontSize = 11.sp)
+                Text(text = "次数", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "${displayRecords.size}",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MiuiTextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
             Column {
-                Text(text = "金额", color = MiuiGray, fontSize = 11.sp)
+                Text(text = "金额", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "¥%.2f".format(totalMoney),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MiuiTextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
             Column {
-                Text(text = "油量", color = MiuiGray, fontSize = 11.sp)
+                Text(text = "油量", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "%.1f L".format(totalVolume),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MiuiTextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
             Column {
-                Text(text = "油耗", color = MiuiGray, fontSize = 11.sp)
+                Text(text = "油耗", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = averageConsumption?.let { "%.1f".format(it) } ?: "--",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MiuiBlue
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -389,7 +383,7 @@ private fun FilterCapsule(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(50.dp),
-        color = if (selected) MiuiBlue else MiuiCard,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
         shadowElevation = if (selected) 1.dp else 0.dp
     ) {
         Text(
@@ -397,7 +391,7 @@ private fun FilterCapsule(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) Color.White else MiuiTextPrimary
+            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -444,10 +438,10 @@ private fun FuelRecordCard(
                         text = timeText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MiuiGray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (record.fuelGrade.isNotBlank()) {
-                        TagChip(text = record.fuelGrade, color = MiuiBlue, bgColor = MiuiTagBg)
+                        TagChip(text = record.fuelGrade, color = MaterialTheme.colorScheme.primary, bgColor = MaterialTheme.colorScheme.primaryContainer)
                     }
                     if (record.isFull) {
                         TagChip(text = "加满", color = Color(0xFF34C759), bgColor = Color(0xFFE8F8EC))
@@ -472,7 +466,7 @@ private fun FuelRecordCard(
                         text = "编辑",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MiuiBlue,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable { onEdit() }
                     )
                     Text(
@@ -497,20 +491,20 @@ private fun FuelRecordCard(
                             text = "¥",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MiuiTextPrimary,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(bottom = 2.dp)
                         )
                         Text(
                             text = "%.2f".format(paidAmount),
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MiuiTextPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Text(
                         text = "%.2f L · 单价 %.2f元/L".format(volume, unitPrice),
                         fontSize = 12.sp,
-                        color = MiuiGray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -521,13 +515,13 @@ private fun FuelRecordCard(
                             text = "%.2f L/100km".format(calculationResult.consumption),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (calculationResult.isOutlier) Color(0xFFFF3B30) else MiuiBlue
+                            color = if (calculationResult.isOutlier) Color(0xFFFF3B30) else MaterialTheme.colorScheme.primary
                         )
                         Text(
                             text = if (calculationResult.isEstimated) "估算行驶 %.0f km".format(calculationResult.distance)
                             else "行驶 %.0f km".format(calculationResult.distance),
                             fontSize = 12.sp,
-                            color = MiuiGray
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         // 排除 null 以及 <= 0 的情况，未登记时显示“未记录里程”
@@ -536,7 +530,7 @@ private fun FuelRecordCard(
                             text = odometerText,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MiuiTextPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -552,21 +546,21 @@ private fun FuelRecordCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MiuiBackground, RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.background, RoundedCornerShape(8.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     if (calculationResult != null && odometer != null && odometer > 0) {
-                        Text("仪表盘里程: ${odometer.toInt()} km", fontSize = 11.sp, color = MiuiGray)
+                        Text("仪表盘里程: ${odometer.toInt()} km", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     record.remainingFuel?.let { remaining ->
-                        Text("加油前剩余: %.2f L".format(remaining), fontSize = 11.sp, color = MiuiGray)
+                        Text("加油前剩余: %.2f L".format(remaining), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (record.hasMissedRecord) {
                         Text("漏记数据: 约 ${record.missedOdometer ?: 0.0} km / ${record.missedVolume ?: 0.0} L", fontSize = 11.sp, color = Color(0xFFFF9500))
                     }
                     if (record.note.isNotBlank()) {
-                        Text("备注: ${record.note}", fontSize = 11.sp, color = MiuiTextPrimary.copy(alpha = 0.8f))
+                        Text("备注: ${record.note}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
                     }
                 }
             }
@@ -574,23 +568,15 @@ private fun FuelRecordCard(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除记录", fontWeight = FontWeight.SemiBold) },
-            text = { Text("确定删除该条加油记录吗？删除后相关油耗计算将重新推导。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteDialog = false
-                    onDelete()
-                }) {
-                    Text("删除", color = Color.Red, fontWeight = FontWeight.Bold)
-                }
+        MiuiConfirmDialog(
+            title = "删除记录",
+            message = "确定删除该条加油记录吗？删除后相关油耗计算将重新推导。",
+            confirmText = "删除",
+            onConfirm = {
+                showDeleteDialog = false
+                onDelete()
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("取消", color = MiuiGray)
-                }
-            }
+            onDismiss = { showDeleteDialog = false }
         )
     }
 }
@@ -652,7 +638,7 @@ private fun DatePicker3WheelSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(),
-        containerColor = MiuiCard,
+        containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(
@@ -666,20 +652,20 @@ private fun DatePicker3WheelSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("取消", color = MiuiGray, fontSize = 15.sp)
+                    Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
                 }
 
                 Text(
                     text = "选择时间",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MiuiTextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 TextButton(onClick = {
                     onSelect(tempYear, tempMonth, tempDay)
                 }) {
-                    Text("确定", color = MiuiBlue, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("确定", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
 
@@ -776,7 +762,7 @@ private fun <T> HyperWheelList(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(itemHeight)
-                .background(MiuiTextPrimary.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
         )
 
         LazyColumn(
@@ -799,7 +785,7 @@ private fun <T> HyperWheelList(
                         text = itemLabel(item),
                         fontSize = if (isSelected) 15.sp else 13.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) MiuiTextPrimary else MiuiTextPrimary.copy(alpha = 0.4f)
+                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     )
                 }
             }
@@ -822,13 +808,13 @@ private fun EmptyRecordsState(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .height(64.dp)
                 .width(64.dp)
-                .background(MiuiLightGray, CircleShape),
+                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Outlined.LocalGasStation,
                 contentDescription = null,
-                tint = MiuiGray,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .height(32.dp)
                     .width(32.dp)
@@ -841,7 +827,7 @@ private fun EmptyRecordsState(modifier: Modifier = Modifier) {
             text = "暂无加油记录",
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
-            color = MiuiTextPrimary
+            color = MaterialTheme.colorScheme.onSurface
         )
 
         Spacer(Modifier.height(4.dp))
@@ -849,7 +835,97 @@ private fun EmptyRecordsState(modifier: Modifier = Modifier) {
         Text(
             text = "点击首页“记加油”添加新记录",
             fontSize = 13.sp,
-            color = MiuiGray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+@Composable
+private fun MiuiConfirmDialog(
+    title: String,
+    message: String,
+    confirmText: String = "确定",
+    dismissText: String = "取消",
+    confirmColor: Color = Color(0xFFFF3B30),
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = message,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 0.6.dp)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(0.dp)
+                    ) {
+                        Text(
+                            text = dismissText,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(0.6.dp)
+                            .height(30.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+
+                    TextButton(
+                        onClick = onConfirm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(0.dp)
+                    ) {
+                        Text(
+                            text = confirmText,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = confirmColor
+                        )
+                    }
+                }
+            }
+        }
     }
 }

@@ -20,18 +20,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,81 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-
-// =========================================================
-// MIUI 主题颜色定义（全项目公开可用）
-// =========================================================
-val MiuiPrimary = Color(0xFF007AFF)
-val MiuiBackground = Color(0xFFF2F2F7)
-val MiuiTextPrimary = Color(0xFF000000)
-
-val MuiXBgColor = Color(0xFFF4F4F6)
-val MuiXCardColor = Color(0xFFFFFFFF)
-val MuiXPrimaryColor = Color(0xFF3482FF)
-val MuiXTextPrimary = Color(0xFF191919)
-val MuiXTextSecondary = Color(0xFF8C8C8C)
-val MuiXDividerColor = Color(0xFFF0F0F3)
-val MuiXSelectionBg = Color(0xFFF2F3F7)
-
-// =========================================================
-// 基础输入框与复选框组件
-// =========================================================
-@Composable
-fun MiuixInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    label: String? = null,
-    suffix: String? = null,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    keyboardOptions: KeyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-    singleLine: Boolean = true,
-    isError: Boolean = false
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier,
-        label = label?.let { { Text(it) } },
-        trailingIcon = suffix?.let { { Text(it, fontSize = 14.sp, color = Color.Gray) } },
-        keyboardOptions = keyboardOptions,
-        singleLine = singleLine,
-        isError = isError,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MiuiPrimary,
-            focusedLabelColor = MiuiPrimary
-        )
-    )
-}
-
-@Composable
-fun MiuixCheckRow(
-    checked: Boolean,
-    text: String,
-    onChecked: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onChecked,
-            colors = CheckboxDefaults.colors(
-                checkedColor = MiuiPrimary
-            )
-        )
-        Text(
-            text = text,
-            color = MiuiTextPrimary,
-            fontSize = 15.sp,
-            modifier = Modifier.padding(start = 8.dp)
-        )
-    }
-}
 
 // =========================================================
 // 卡片布局与表单列表组件
@@ -139,7 +57,7 @@ fun MuiXSectionHeader(title: String) {
         text = title,
         fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
-        color = MuiXTextSecondary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 12.dp, bottom = 6.dp)
     )
 }
@@ -149,7 +67,7 @@ fun MuiXGroupCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MuiXCardColor
+        color = MaterialTheme.colorScheme.surface
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             content()
@@ -174,7 +92,7 @@ fun MuiXInputItem(
         Text(
             text = label,
             fontSize = 15.sp,
-            color = MuiXTextPrimary,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.width(110.dp)
         )
         BasicTextField(
@@ -183,7 +101,7 @@ fun MuiXInputItem(
             modifier = Modifier.weight(1f),
             textStyle = TextStyle(
                 fontSize = 15.sp,
-                color = MuiXTextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium
             ),
             singleLine = true,
@@ -194,7 +112,7 @@ fun MuiXInputItem(
                         Text(
                             text = placeholder,
                             fontSize = 15.sp,
-                            color = MuiXTextSecondary.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
                     innerTextField()
@@ -220,13 +138,16 @@ fun MuiXClickableItem(
         Text(
             text = label,
             fontSize = 15.sp,
-            color = MuiXTextPrimary,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.width(110.dp)
         )
         Text(
             text = value.ifBlank { "请选择" },
             fontSize = 15.sp,
-            color = if (value.isBlank()) MuiXTextSecondary.copy(alpha = 0.6f) else MuiXPrimaryColor,
+            color = if (value.isBlank())
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            else
+                MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f)
         )
@@ -237,9 +158,6 @@ fun MuiXClickableItem(
 // 通用 BottomSheet 弹窗与滚轮选择器组件
 // =========================================================
 
-/**
- * 通用底部弹窗容器组件（带 取消 / 确认 按钮）
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MuiXBottomSheetDialog(
@@ -253,7 +171,7 @@ fun MuiXBottomSheetDialog(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MuiXCardColor,
+        containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
         Column(
@@ -269,11 +187,25 @@ fun MuiXBottomSheetDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("取消", color = MuiXTextSecondary, fontSize = 15.sp)
+                    Text(
+                        "取消",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 15.sp
+                    )
                 }
-                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MuiXTextPrimary)
+                Text(
+                    title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 TextButton(onClick = onConfirm) {
-                    Text("确定", color = MuiXPrimaryColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "确定",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -282,9 +214,6 @@ fun MuiXBottomSheetDialog(
     }
 }
 
-/**
- * 独立滚轮单列选择组件（修复对齐与点击居中 Bug）
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MuiXWheelPickerColumn(
@@ -303,12 +232,10 @@ fun MuiXWheelPickerColumn(
 
     val paddingItems = visibleCount / 2
     val coroutineScope = rememberCoroutineScope()
-    // 当 padding 被按 itemHeight 拆分后，Option initialIndex 正好对应 listState 的 initialFirstVisibleItemIndex
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
     val totalHeight = itemHeight * visibleCount
 
-    // 计算当前处于居中位置的 Option 索引
     val selectedIndex by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
@@ -319,7 +246,6 @@ fun MuiXWheelPickerColumn(
                 val centeredItem = visibleItems.minByOrNull {
                     abs((it.offset + it.size / 2) - centerOffset)
                 }
-                // 扣除顶部的 paddingItems 个 Spacer 项
                 (centeredItem?.index?.minus(paddingItems))?.coerceIn(0, options.lastIndex) ?: initialIndex
             }
         }
@@ -329,28 +255,26 @@ fun MuiXWheelPickerColumn(
         modifier = modifier.height(totalHeight),
         contentAlignment = Alignment.Center
     ) {
-        // 1. 中间圆角高亮背景
+        // 中间圆角高亮背景
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
                 .height(itemHeight)
                 .clip(RoundedCornerShape(10.dp))
-                .background(MuiXSelectionBg)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         )
 
-        // 2. 单层滚动列表
+        // 单层滚动列表
         LazyColumn(
             state = listState,
             flingBehavior = snapFlingBehavior,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // 顶部填充项（拆分为 paddingItems 个独立 Item）
             items(paddingItems) {
                 Spacer(modifier = Modifier.height(itemHeight))
             }
 
-            // 选项列表
             itemsIndexed(options) { index, item ->
                 val isSelected = index == selectedIndex
 
@@ -360,7 +284,6 @@ fun MuiXWheelPickerColumn(
                         .height(itemHeight)
                         .clickable {
                             coroutineScope.launch {
-                                // 点击时平滑滚动到该项居中
                                 listState.animateScrollToItem(index)
                             }
                         },
@@ -370,18 +293,19 @@ fun MuiXWheelPickerColumn(
                         text = item,
                         fontSize = if (isSelected) 17.sp else 15.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) MuiXTextPrimary else MuiXTextSecondary
+                        color = if (isSelected)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // 底部填充项
             items(paddingItems) {
                 Spacer(modifier = Modifier.height(itemHeight))
             }
         }
 
-        // 3. 滚动停止后自动同步选中值
         LaunchedEffect(listState.isScrollInProgress) {
             if (!listState.isScrollInProgress) {
                 val safeIndex = selectedIndex.coerceIn(0, options.lastIndex)
@@ -393,9 +317,6 @@ fun MuiXWheelPickerColumn(
     }
 }
 
-/**
- * 单列滚轮选择器 BottomSheet 弹窗
- */
 @Composable
 fun MuiXWheelPickerBottomSheet(
     title: String,
@@ -404,7 +325,9 @@ fun MuiXWheelPickerBottomSheet(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    var selectedValue by remember { mutableStateOf(currentValue.ifBlank { options.firstOrNull() ?: "" }) }
+    var selectedValue by remember {
+        mutableStateOf(currentValue.ifBlank { options.firstOrNull() ?: "" })
+    }
 
     MuiXBottomSheetDialog(
         title = title,
@@ -417,39 +340,5 @@ fun MuiXWheelPickerBottomSheet(
             onValueChange = { selectedValue = it },
             modifier = Modifier.fillMaxWidth()
         )
-    }
-}
-
-/**
- * 日期选择器 BottomSheet 弹窗
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MuiXDatePickerBottomSheet(
-    initialMillis: Long?,
-    onDismiss: () -> Unit,
-    onDateSelected: (Long?) -> Unit
-) {
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    datePickerState.selectedDateMillis?.let { onDateSelected(it) }
-                    onDismiss()
-                }
-            ) {
-                Text("确定", color = MuiXPrimaryColor, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消", color = MuiXTextSecondary)
-            }
-        }
-    ) {
-        DatePicker(state = datePickerState)
     }
 }

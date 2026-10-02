@@ -27,6 +27,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,18 +58,17 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-private val MiuiBackground = Color(0xFFF7F7F7)
-private val MiuiCard = Color(0xFFFFFFFF)
-private val MiuiTextPrimary = Color(0xFF222222)
-private val MiuiTextGray = Color(0xFF888888)
-private val MiuiPrimary = Color(0xFF007AFF)
-
 private enum class StatisticsFilter {
     ALL,
     MONTH,
     YEAR,
     CUSTOM_MONTH
 }
+
+// 语义色 (这些 Material 没有对应槽位, 深浅色下都清晰)
+private val ConsumptionOrange = Color(0xFFFF6900)
+private val WarningOrange = Color(0xFFFF9800)
+private val SuccessGreen = Color(0xFF4CAF50)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,26 +113,28 @@ fun StatisticsScreen(
     }
 
     Scaffold(
-        containerColor = MiuiBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = "统计",
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 20.sp
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
+                            contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MiuiBackground
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
@@ -157,7 +159,7 @@ fun StatisticsScreen(
                         text = "统计范围",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MiuiTextGray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Row(
@@ -166,10 +168,10 @@ fun StatisticsScreen(
                     ) {
                         val chipShape = RoundedCornerShape(16.dp)
                         val chipColors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color.White,
-                            labelColor = MiuiTextPrimary,
-                            selectedContainerColor = MiuiPrimary,
-                            selectedLabelColor = Color.White
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface,
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                         )
 
                         FilterChip(
@@ -201,9 +203,7 @@ fun StatisticsScreen(
 
                         FilterChip(
                             selected = selectedFilter == StatisticsFilter.CUSTOM_MONTH,
-                            onClick = {
-                                showMonthDialog = true
-                            },
+                            onClick = { showMonthDialog = true },
                             label = {
                                 Text(
                                     if (selectedFilter == StatisticsFilter.CUSTOM_MONTH) {
@@ -227,7 +227,7 @@ fun StatisticsScreen(
                             customMonth = selectedMonth
                         ),
                         fontSize = 12.sp,
-                        color = MiuiTextGray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -242,7 +242,8 @@ fun StatisticsScreen(
                         Text(
                             text = "统计数据",
                             fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
 
                         Row(
@@ -287,7 +288,7 @@ fun StatisticsScreen(
                             Text(
                                 text = "提示：含有 ${summary.unclosedCount} 次加油尚未填写后续里程，将在下次填写里程后自动推算平摊油耗。",
                                 fontSize = 12.sp,
-                                color = Color(0xFFFF9800)
+                                color = WarningOrange
                             )
                         }
                     }
@@ -305,17 +306,18 @@ fun StatisticsScreen(
                             Text(
                                 text = "漏记加油量",
                                 fontSize = 14.sp,
-                                color = MiuiTextGray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = "%.2f L".format(summary.totalMissedVolume),
                                 fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "该数据已计入消耗量，未计入实际支付金额",
                                 fontSize = 12.sp,
-                                color = MiuiTextGray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -328,7 +330,8 @@ fun StatisticsScreen(
                     text = "油耗明细",
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
 
@@ -342,7 +345,8 @@ fun StatisticsScreen(
                             Text(
                                 text = "暂无可计算的油耗",
                                 fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = when (selectedFilter) {
@@ -352,7 +356,7 @@ fun StatisticsScreen(
                                     StatisticsFilter.CUSTOM_MONTH -> "${selectedYear}年${selectedMonth}月暂无可计算的油耗数据。"
                                 },
                                 fontSize = 13.sp,
-                                color = MiuiTextGray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -399,7 +403,9 @@ private fun MiuixCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MiuiCard),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         content = { content() }
     )
@@ -414,13 +420,14 @@ private fun StatisticValue(
         Text(
             text = title,
             fontSize = 12.sp,
-            color = MiuiTextGray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
             fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -451,13 +458,14 @@ private fun StatisticsConsumptionItem(
                 Text(
                     text = timeText,
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "%.2f L/100km".format(result.consumption),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFF6900)
+                    color = ConsumptionOrange
                 )
             }
 
@@ -468,12 +476,12 @@ private fun StatisticsConsumptionItem(
                 Text(
                     text = "表显: %.0f km → %.0f km".format(result.startOdometer, result.endOdometer),
                     fontSize = 13.sp,
-                    color = MiuiTextPrimary.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "行驶 %.0f km · 加油 %.2f L".format(result.distance, result.fuelUsed),
                     fontSize = 13.sp,
-                    color = MiuiTextGray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -481,7 +489,7 @@ private fun StatisticsConsumptionItem(
                 text = if (result.isEstimated) "油量平摊估算" else "精准计算",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (result.isEstimated) Color(0xFFFF9800) else Color(0xFF4CAF50)
+                color = if (result.isEstimated) WarningOrange else SuccessGreen
             )
         }
     }
@@ -501,13 +509,13 @@ private fun HyperWheelMonthPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MiuiCard,
+        containerColor = MaterialTheme.colorScheme.surface,
         title = {
             Text(
                 text = "选择统计月份",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = MiuiTextPrimary
+                color = MaterialTheme.colorScheme.onSurface
             )
         },
         text = {
@@ -536,12 +544,16 @@ private fun HyperWheelMonthPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(year, month) }) {
-                Text("确定", color = MiuiPrimary, fontWeight = FontWeight.Bold)
+                Text(
+                    "确定",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消", color = MiuiTextGray)
+                Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         shape = RoundedCornerShape(24.dp)
@@ -560,7 +572,9 @@ private fun <T> HyperWheelList(
 ) {
     val itemHeight = 38.dp
     val density = LocalDensity.current
-    val itemHeightPx = remember(density, itemHeight) { with(density) { itemHeight.toPx() } }
+    val itemHeightPx = remember(density, itemHeight) {
+        with(density) { itemHeight.toPx() }
+    }
 
     val initialIndex = remember(items) {
         items.indexOf(selectedValue).coerceAtLeast(0)
@@ -569,7 +583,6 @@ private fun <T> HyperWheelList(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
 
-    // 计算当前处于中间位置的 Item 索引
     val selectedIndex by remember {
         derivedStateOf {
             val firstVisible = listState.firstVisibleItemIndex
@@ -578,7 +591,6 @@ private fun <T> HyperWheelList(
         }
     }
 
-    // 只有当列表滑动停止（isScrollInProgress == false）且索引发生变化时，才同步通知外部
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }
             .collect { isScrolling ->
@@ -602,7 +614,10 @@ private fun <T> HyperWheelList(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(itemHeight)
-                .background(MiuiTextPrimary.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp)
+                )
         )
 
         LazyColumn(
@@ -628,7 +643,10 @@ private fun <T> HyperWheelList(
                         text = itemLabel(item),
                         fontSize = if (isSelected) 15.sp else 13.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) MiuiTextPrimary else MiuiTextPrimary.copy(alpha = 0.4f)
+                        color = if (isSelected)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
             }
@@ -659,12 +677,10 @@ private fun getStatisticsRange(
         StatisticsFilter.MONTH -> {
             calendar.set(Calendar.DAY_OF_MONTH, 1)
         }
-
         StatisticsFilter.YEAR -> {
             calendar.set(Calendar.MONTH, Calendar.JANUARY)
             calendar.set(Calendar.DAY_OF_MONTH, 1)
         }
-
         StatisticsFilter.CUSTOM_MONTH -> {
             calendar.set(Calendar.YEAR, customYear)
             calendar.set(Calendar.MONTH, customMonth - 1)
@@ -676,8 +692,10 @@ private fun getStatisticsRange(
     val endCalendar = calendar.clone() as Calendar
 
     when (filter) {
-        StatisticsFilter.MONTH, StatisticsFilter.CUSTOM_MONTH -> endCalendar.add(Calendar.MONTH, 1)
-        StatisticsFilter.YEAR -> endCalendar.add(Calendar.YEAR, 1)
+        StatisticsFilter.MONTH, StatisticsFilter.CUSTOM_MONTH ->
+            endCalendar.add(Calendar.MONTH, 1)
+        StatisticsFilter.YEAR ->
+            endCalendar.add(Calendar.YEAR, 1)
     }
 
     val end = endCalendar.timeInMillis - 1
@@ -693,8 +711,11 @@ private fun getFilterDescription(
 ): String {
     return when (filter) {
         StatisticsFilter.ALL -> "显示全部历史记录"
-        StatisticsFilter.MONTH -> SimpleDateFormat("yyyy年MM月", Locale.getDefault()).format(Date(now)) + " · 显示本月记录"
-        StatisticsFilter.YEAR -> SimpleDateFormat("yyyy年", Locale.getDefault()).format(Date(now)) + " · 显示今年记录"
-        StatisticsFilter.CUSTOM_MONTH -> "${customYear}年${customMonth}月 · 显示指定月份记录"
+        StatisticsFilter.MONTH ->
+            SimpleDateFormat("yyyy年MM月", Locale.getDefault()).format(Date(now)) + " · 显示本月记录"
+        StatisticsFilter.YEAR ->
+            SimpleDateFormat("yyyy年", Locale.getDefault()).format(Date(now)) + " · 显示今年记录"
+        StatisticsFilter.CUSTOM_MONTH ->
+            "${customYear}年${customMonth}月 · 显示指定月份记录"
     }
 }

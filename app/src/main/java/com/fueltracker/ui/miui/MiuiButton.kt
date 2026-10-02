@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,8 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-
 
 /**
  * 普通主按钮
@@ -32,17 +31,15 @@ fun MiuiButton(
             .fillMaxWidth()
             .height(48.dp)
             .background(
-                color = MiuiColors.Primary,
+                color = MaterialTheme.colorScheme.primary,
                 shape = RoundedCornerShape(12.dp)
             )
-            .clickable {
-                onClick()
-            },
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            color = MiuiColors.White,
+            color = MaterialTheme.colorScheme.onPrimary,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium
         )
@@ -60,25 +57,21 @@ fun MiuiTextIconButton(
 ) {
     Row(
         modifier = Modifier
-            .clickable {
-                onClick()
-            }
-            .padding(
-                horizontal = 8.dp,
-                vertical = 6.dp
-            ),
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
             text = icon,
-            fontSize = 18.sp
+            fontSize = 18.sp,
+            color = MaterialTheme.colorScheme.onSurface
         )
 
         Text(
             text = text,
             fontSize = 14.sp,
-            color = MiuiColors.Primary,
+            color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Medium
         )
     }
@@ -94,16 +87,11 @@ fun MiuiLinkButton(
 ) {
     Text(
         text = text,
-        color = MiuiColors.Primary,
+        color = MaterialTheme.colorScheme.primary,
         fontSize = 14.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier
-            .clickable {
-                onClick()
-            }
-            .padding(
-                horizontal = 8.dp,
-                vertical = 6.dp
-            )
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp)
     )
 }

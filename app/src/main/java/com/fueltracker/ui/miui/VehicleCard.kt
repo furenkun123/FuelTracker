@@ -32,7 +32,7 @@ import com.fueltracker.data.Vehicle
 fun VehicleCard(
     vehicle: Vehicle,
     modifier: Modifier = Modifier,
-    onSwitchClick: (() -> Unit)? = null, // 传入后显示“切换”入口
+    onSwitchClick: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
     MiuiCard(
@@ -64,16 +64,15 @@ fun VehicleCard(
                     Text(
                         text = "${vehicle.brand} ${vehicle.series}",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    // 当前车辆标识
                     if (vehicle.isCurrent) {
                         CurrentVehicleBadge()
                     }
                 }
 
-                // 切换车辆按钮入口（若传入 onSwitchClick）
                 if (onSwitchClick != null) {
                     Row(
                         modifier = Modifier
@@ -101,12 +100,12 @@ fun VehicleCard(
             Text(
                 text = "${vehicle.year}款 ${vehicle.model}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MiuiColors.SecondaryText
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 第三行：参数展示 (油箱 / 燃油 / 官方油耗)
+            // 第三行：参数展示 (油箱 / 燃油)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(28.dp)
@@ -118,13 +117,12 @@ fun VehicleCard(
 
                 MiuiInfoItem(
                     title = "燃油",
-                    value = "${vehicle.fuelGrade} (#${vehicle.fuelType})"
+                    value = "${vehicle.fuelGrade} (${vehicle.fuelType})"
                 )
-                }
             }
         }
     }
-
+}
 
 /**
  * 当前车辆标签 (MIUI 风格微胶囊)
@@ -137,9 +135,7 @@ private fun CurrentVehicleBadge() {
             .background(MaterialTheme.colorScheme.primaryContainer)
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = null,
@@ -166,7 +162,7 @@ fun MiuiInfoItem(
         Text(
             text = title,
             style = MaterialTheme.typography.labelSmall,
-            color = MiuiColors.SecondaryText
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(2.dp))
@@ -174,7 +170,8 @@ fun MiuiInfoItem(
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

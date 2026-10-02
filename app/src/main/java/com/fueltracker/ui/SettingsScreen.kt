@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -23,16 +24,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
@@ -42,16 +42,21 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,22 +65,52 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import com.fueltracker.BuildConfig
 import com.fueltracker.data.Vehicle
-import com.fueltracker.ui.miui.MiuiCard
-import com.fueltracker.ui.miui.MiuiColors
-import com.fueltracker.ui.miui.MiuiLinkButton
-import com.fueltracker.ui.miui.MiuiTopBar
+import com.fueltracker.ui.theme.ThemeMode
+import com.fueltracker.ui.theme.ThemePreferences
 import com.fueltracker.util.BackupManager
 import kotlinx.coroutines.launch
-import com.fueltracker.BuildConfig
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.animateScrollBy
 
+private val ExpandSpec = expandVertically(
+    animationSpec = tween(
+        durationMillis = 380,
+        easing = FastOutSlowInEasing
+    )
+)
+
+private val ShrinkSpec = shrinkVertically(
+    animationSpec = tween(
+        durationMillis = 300,
+        easing = FastOutSlowInEasing
+    )
+)
+
+private val FadeInSpec = fadeIn(
+    animationSpec = tween(durationMillis = 260, delayMillis = 80)
+)
+
+private val FadeOutSpec = fadeOut(
+    animationSpec = tween(durationMillis = 180)
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     vehicles: List<Vehicle>,
@@ -90,11 +125,12 @@ fun SettingsScreen(
 
     var vehicleToDelete by remember { mutableStateOf<Vehicle?>(null) }
     var selectedRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    var isDataExpanded by remember { mutableStateOf(false) }       // 数据管理折叠状态
-    var isAboutExpanded by remember { mutableStateOf(false) }      // 关于折叠状态
-    var showInstructionsDialog by remember { mutableStateOf(false) } // 应用说明弹窗状态
+    var isDataExpanded by remember { mutableStateOf(false) }
+    var isAboutExpanded by remember { mutableStateOf(false) }
+    var isThemeExpanded by remember { mutableStateOf(false) }
+    var isInstructionsExpanded by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
-    // 导出备份文件选择器
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -110,7 +146,6 @@ fun SettingsScreen(
         }
     }
 
-    // 导入备份文件选择器
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -120,34 +155,45 @@ fun SettingsScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // MIUI 顶栏
-        MiuiTopBar(
-            title = "设置与数据",
+        // 顶栏
+        TopAppBar(
+            title = {
+                Text(
+                    text = "设置与数据",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回",
-                        tint = MiuiColors.Text
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background
+            )
         )
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ================= 车辆管理区域 =================
+            // ============ 车辆管理 ============
             item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -157,18 +203,22 @@ fun SettingsScreen(
                     ) {
                         Text(
                             text = "车辆管理",
-                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MiuiColors.Text
+                            color = MaterialTheme.colorScheme.onBackground
                         )
-                        MiuiLinkButton(
-                            text = "＋ 添加车辆",
-                            onClick = onAddVehicle
-                        )
+                        TextButton(onClick = onAddVehicle) {
+                            Text(
+                                text = "＋ 添加车辆",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
 
                     if (vehicles.isEmpty()) {
-                        MiuiCard(modifier = Modifier.fillMaxWidth()) {
+                        MiuiCardLocal {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -177,8 +227,8 @@ fun SettingsScreen(
                             ) {
                                 Text(
                                     text = "暂无车辆信息，请添加车辆",
-                                    color = MiuiColors.SecondaryText,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 14.sp
                                 )
                             }
                         }
@@ -195,24 +245,19 @@ fun SettingsScreen(
                 )
             }
 
-            // ================= 数据备份与恢复区域 (可折叠) =================
+            // ============ 数据管理 ============
             item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "数据管理",
-                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MiuiColors.Text,
+                        color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     )
 
-                    MiuiCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        ) {
-                            // 折叠/展开 头部栏
+                    MiuiCardLocal {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -229,54 +274,51 @@ fun SettingsScreen(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(CircleShape)
-                                            .background(MiuiColors.Primary.copy(alpha = 0.08f)),
+                                            .background(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                            ),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Folder,
                                             contentDescription = null,
-                                            tint = MiuiColors.Primary,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
-
                                     Spacer(modifier = Modifier.width(12.dp))
-
                                     Column {
                                         Text(
                                             text = "备份与恢复",
-                                            style = MaterialTheme.typography.titleMedium,
+                                            fontSize = 15.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = MiuiColors.Text
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "导出或导入本地 JSON 数据备份文件",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MiuiColors.SecondaryText
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
-
                                 Icon(
                                     imageVector = if (isDataExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                     contentDescription = if (isDataExpanded) "收起" else "展开",
-                                    tint = MiuiColors.SecondaryText
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            // 展开内容区域：导出备份 / 恢复备份
                             AnimatedVisibility(
                                 visible = isDataExpanded,
-                                enter = expandVertically(),
-                                exit = shrinkVertically()
+                                enter = ExpandSpec + FadeInSpec,
+                                exit = ShrinkSpec + FadeOutSpec
                             ) {
                                 Column {
                                     HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 16.dp),
-                                        color = MiuiColors.SecondaryText.copy(alpha = 0.12f)
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        thickness = 0.6.dp
                                     )
-
                                     SettingActionRow(
                                         icon = Icons.Default.FileUpload,
                                         title = "导出本地备份",
@@ -285,12 +327,10 @@ fun SettingsScreen(
                                             exportLauncher.launch(BackupManager.generateFileName())
                                         }
                                     )
-
                                     HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 16.dp),
-                                        color = MiuiColors.SecondaryText.copy(alpha = 0.12f)
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        thickness = 0.6.dp
                                     )
-
                                     SettingActionRow(
                                         icon = Icons.Default.FileDownload,
                                         title = "恢复本地备份",
@@ -305,25 +345,154 @@ fun SettingsScreen(
                     }
                 }
             }
-
-            // ================= 关于应用区域 (可折叠) =================
+            // ============ 显示 / 主题 ============
             item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "关于",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = "显示",
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MiuiColors.Text,
+                        color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     )
 
-                    MiuiCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        ) {
+                    MiuiCardLocal {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             // 折叠/展开 头部栏
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isThemeExpanded = !isThemeExpanded }
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Brightness6,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "主题",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = ThemePreferences.mode.displayName,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = if (isThemeExpanded)
+                                        Icons.Default.KeyboardArrowUp
+                                    else
+                                        Icons.Default.KeyboardArrowDown,
+                                    contentDescription = if (isThemeExpanded) "收起" else "展开",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            // 展开内容区: 三个主题选项
+                            AnimatedVisibility(
+                                visible = isThemeExpanded,
+                                enter = expandVertically(
+                                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                                ) + fadeIn(
+                                    animationSpec = tween(300, delayMillis = 200)
+                                ),
+                                exit = shrinkVertically(
+                                    animationSpec = tween(300, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                                ) + fadeOut(animationSpec = tween(180))
+                            ) {
+                                Column {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        thickness = 0.6.dp
+                                    )
+                                    ThemeMode.entries.forEach { mode ->
+                                        val selected = ThemePreferences.mode == mode
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    ThemePreferences.setMode(context, mode)
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = mode.displayName,
+                                                fontSize = 14.sp,
+                                                color = if (selected)
+                                                    MaterialTheme.colorScheme.primary
+                                                else
+                                                    MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = if (selected)
+                                                    FontWeight.Medium
+                                                else
+                                                    FontWeight.Normal
+                                            )
+                                            if (selected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "已选中",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                        if (mode != ThemeMode.entries.last()) {
+                                            HorizontalDivider(
+                                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                                thickness = 0.6.dp,
+                                                modifier = Modifier.padding(start = 16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ============ 关于 ============
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "关于",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+
+                    MiuiCardLocal {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -340,52 +509,56 @@ fun SettingsScreen(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(CircleShape)
-                                            .background(MiuiColors.Primary.copy(alpha = 0.08f)),
+                                            .background(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                            ),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Info,
                                             contentDescription = null,
-                                            tint = MiuiColors.Primary,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
-
                                     Spacer(modifier = Modifier.width(12.dp))
-
                                     Column {
                                         Text(
                                             text = "关于应用",
-                                            style = MaterialTheme.typography.titleMedium,
+                                            fontSize = 15.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = MiuiColors.Text
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "版本信息、使用说明、网盘更新与开发者联系",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MiuiColors.SecondaryText
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
-
                                 Icon(
                                     imageVector = if (isAboutExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                     contentDescription = if (isAboutExpanded) "收起" else "展开",
-                                    tint = MiuiColors.SecondaryText
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            // 展开内容区域
                             AnimatedVisibility(
                                 visible = isAboutExpanded,
-                                enter = expandVertically(),
-                                exit = shrinkVertically()
+                                enter = expandVertically(
+                                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                                ) + fadeIn(
+                                    animationSpec = tween(300, delayMillis = 200)
+                                ),
+                                exit = shrinkVertically(
+                                    animationSpec = tween(300, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                                ) + fadeOut(animationSpec = tween(180))
                             ) {
                                 Column {
                                     HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 16.dp),
-                                        color = MiuiColors.SecondaryText.copy(alpha = 0.12f)
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        thickness = 0.6.dp
                                     )
 
                                     Column(
@@ -394,162 +567,129 @@ fun SettingsScreen(
                                             .padding(horizontal = 16.dp, vertical = 12.dp),
                                         verticalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
-
-                                        // 2. 应用说明(点击弹出说明对话框)
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { showInstructionsDialog = true }
-                                                .padding(vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = "应用说明",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MiuiColors.Text
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    text = "初次使用建议先阅读使用说明与功能指南",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MiuiColors.SecondaryText
-                                                )
-                                            }
-                                            Icon(
-                                                imageVector = Icons.Default.Description,
-                                                contentDescription = "应用说明",
-                                                tint = MiuiColors.Primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-
-                                        HorizontalDivider(color = MiuiColors.SecondaryText.copy(alpha = 0.08f))
-
-                                        // 3. 查看更新（网盘链接）
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    val cloudDriveUrl = "https://yun.139.com/shareweb/#/w/i/2xTrJEeQhKJ01"
-                                                    try {
-                                                        val intent = Intent(Intent.ACTION_VIEW, cloudDriveUrl.toUri())
-                                                        context.startActivity(intent)
-                                                    } catch (_: Exception) {
-                                                        Toast.makeText(context, "无法打开网盘链接", Toast.LENGTH_SHORT).show()
-                                                    }
+                                        // 应用说明(可展开)
+                                        Column {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { isInstructionsExpanded = !isInstructionsExpanded }
+                                                    .padding(vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = "应用说明",
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        text = "初次使用建议先阅读使用说明与功能指南",
+                                                        fontSize = 12.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
                                                 }
-                                                .padding(vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = "查看更新",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MiuiColors.Text
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    text = "跳转网盘查看与下载最新安装包",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MiuiColors.SecondaryText
+                                                Icon(
+                                                    imageVector = if (isInstructionsExpanded)
+                                                        Icons.Default.KeyboardArrowUp
+                                                    else
+                                                        Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = if (isInstructionsExpanded) "收起" else "展开",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             }
-                                            Icon(
-                                                imageVector = Icons.Default.CloudDownload,
-                                                contentDescription = "查看更新",
-                                                tint = MiuiColors.Primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
 
-                                        HorizontalDivider(color = MiuiColors.SecondaryText.copy(alpha = 0.08f))
-
-
-
-                                        // 5. GitHub
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    val githubUrl = "https://github.com/furenkun123/FuelTracker"
-                                                    try {
-                                                        val intent = Intent(Intent.ACTION_VIEW, githubUrl.toUri())
-                                                        context.startActivity(intent)
-                                                    } catch (_: Exception) {
-                                                        Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-                                                    }
+                                            // 展开区域
+                                            AnimatedVisibility(
+                                                visible = isInstructionsExpanded,
+                                                enter = expandVertically(
+                                                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                                                ) + fadeIn(
+                                                    animationSpec = tween(300, delayMillis = 200)
+                                                ),
+                                                exit = shrinkVertically(
+                                                    animationSpec = tween(300, easing = CubicBezierEasing(
+                                                        0.4f,
+                                                        0f,
+                                                        0.2f,
+                                                        1f
+                                                    )
+                                                    )
+                                                ) + fadeOut(animationSpec = tween(180))
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(top = 10.dp, bottom = 4.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    MiuiInstructionItem(1, "应用完全离线使用，一定注意备份")
+                                                    MiuiInstructionItem(2, "完全依赖免费 AI 提供代码，所以直接 GitHub 开源。有兴趣的自己改，使用应该没明显 Bug")
+                                                    MiuiInstructionItem(3, "平均油耗使用多个逻辑算法，加满和漏记也参与计算")
+                                                    MiuiInstructionItem(4, "车型信息爬取筛选后还有 3000 多车系，可能有遗漏")
+                                                    MiuiInstructionItem(5, "支持多车辆切换")
                                                 }
-                                                .padding(vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = "GitHub",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MiuiColors.Text
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    text = "https://github.com/furenkun123/FuelTracker",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MiuiColors.SecondaryText
-                                                )
                                             }
-                                            Icon(
-                                                imageVector = Icons.Default.Code,
-                                                contentDescription = "GitHub",
-                                                tint = MiuiColors.Primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
                                         }
-                                        // 4. 联系我（跳转指定网址）
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    val contactUrl = "https://qm.qq.com/q/MEBXIAFnSm"
-                                                    try {
-                                                        val intent = Intent(Intent.ACTION_VIEW, contactUrl.toUri())
-                                                        context.startActivity(intent)
-                                                    } catch (_: Exception) {
-                                                        Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-                                                    }
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            thickness = 0.6.dp
+                                        )
+                                        AboutRow(
+                                            title = "查看更新",
+                                            subtitle = "跳转网盘查看与下载最新安装包",
+                                            icon = Icons.Default.CloudDownload,
+                                            onClick = {
+                                                val url = "https://yun.139.com/shareweb/#/w/i/2xTrJEeQhKJ01"
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "无法打开网盘链接", Toast.LENGTH_SHORT).show()
                                                 }
-                                                .padding(vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = "联系我",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MiuiColors.Text
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    text = "QQ与我联系",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MiuiColors.SecondaryText
-                                                )
                                             }
-                                            Icon(
-                                                imageVector = Icons.Default.Person,
-                                                contentDescription = "联系我",
-                                                tint = MiuiColors.Primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
+                                        )
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            thickness = 0.6.dp
+                                        )
+                                        AboutRow(
+                                            title = "GitHub",
+                                            subtitle = "https://github.com/furenkun123/FuelTracker",
+                                            icon = Icons.Default.Code,
+                                            onClick = {
+                                                val url = "https://github.com/furenkun123/FuelTracker"
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        )
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            thickness = 0.6.dp
+                                        )
+                                        AboutRow(
+                                            title = "联系我",
+                                            subtitle = "QQ与我联系",
+                                            icon = Icons.Default.Person,
+                                            onClick = {
+                                                val url = "https://qm.qq.com/q/MEBXIAFnSm"
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        )
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            thickness = 0.6.dp
+                                        )
 
-                                        HorizontalDivider(color = MiuiColors.SecondaryText.copy(alpha = 0.08f))
-                                        // 1. 版本号
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -557,19 +697,17 @@ fun SettingsScreen(
                                         ) {
                                             Text(
                                                 text = "版本号",
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontSize = 14.sp,
                                                 fontWeight = FontWeight.Medium,
-                                                color = MiuiColors.Text
+                                                color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Text(
                                                 text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontSize = 14.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MiuiColors.Primary
+                                                color = MaterialTheme.colorScheme.primary
                                             )
                                         }
-
-                                        HorizontalDivider(color = MiuiColors.SecondaryText.copy(alpha = 0.08f))
                                     }
                                 }
                             }
@@ -577,152 +715,111 @@ fun SettingsScreen(
                     }
                 }
             }
+
+        }
+    }
+    // ============ 展开自动滚到可见 ============
+    LaunchedEffect(isDataExpanded) {
+        if (isDataExpanded) {
+            delay(410.milliseconds)
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            val viewportEnd = listState.layoutInfo.viewportEndOffset
+            val remaining = (last?.let { it.offset + it.size } ?: 0) - viewportEnd
+            if (remaining > 0) {
+                listState.animateScrollBy(
+                    value = remaining.toFloat(),
+                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                )
+            }
         }
     }
 
-    // ================= 应用说明弹窗 =================
-    if (showInstructionsDialog) {
-        AlertDialog(
-            onDismissRequest = { showInstructionsDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+    LaunchedEffect(isThemeExpanded) {
+        if (isThemeExpanded) {
+            delay(410.milliseconds)
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            val viewportEnd = listState.layoutInfo.viewportEndOffset
+            val remaining = (last?.let { it.offset + it.size } ?: 0) - viewportEnd
+            if (remaining > 0) {
+                listState.animateScrollBy(
+                    value = remaining.toFloat(),
+                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
                 )
-            },
-            title = {
-                Text(
-                    text = "应用说明",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    InstructionItem(
-                        index = "1",
-                        text = "应用全离线使用，一定注意备份"
-                    )
-                    InstructionItem(
-                        index = "2",
-                        text = "完全依赖免费 AI 提供代码，所以直接 GitHub 开源。有兴趣的自己改，使用应该没明显 Bug"
-                    )
-                    InstructionItem(
-                        index = "3",
-                        text = "平均油耗使用多个逻辑算法，加满和漏记也参与计算"
-                    )
-                    InstructionItem(
-                        index = "4",
-                        text = "车型信息爬取筛选后还有 3000 多车系，可能有遗漏"
-                    )
-                    InstructionItem(
-                        index = "5",
-                        text = "支持多车辆切换"
-
-                    )
-
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showInstructionsDialog = false }) {
-                    Text("我知道了", fontWeight = FontWeight.Bold)
-                }
             }
-        )
+        }
     }
 
-    // 删除确认对话框
+    LaunchedEffect(isAboutExpanded) {
+        if (isAboutExpanded) {
+            delay(410.milliseconds)
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            val viewportEnd = listState.layoutInfo.viewportEndOffset
+            val remaining = (last?.let { it.offset + it.size } ?: 0) - viewportEnd
+            if (remaining > 0) {
+                listState.animateScrollBy(
+                    value = remaining.toFloat(),
+                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                )
+            }
+        }
+    }
+
+    // 删除车辆
     vehicleToDelete?.let { vehicle ->
-        AlertDialog(
-            onDismissRequest = { vehicleToDelete = null },
-            title = {
-                Text(
-                    text = "确认删除车辆？",
-                    fontWeight = FontWeight.Bold,
-                    color = MiuiColors.Text
-                )
+        MiuiConfirmDialog(
+            title = "确认删除车辆？",
+            message = "删除“${vehicle.brand} ${vehicle.model}”将同步删除该车辆下的所有加油记录，且不可恢复。",
+            confirmText = "删除",
+            onConfirm = {
+                onDeleteVehicle(vehicle)
+                vehicleToDelete = null
             },
-            text = {
-                Text(
-                    text = "删除“${vehicle.brand} ${vehicle.model}”将同步删除该车辆下的所有加油记录，且不可恢复。",
-                    color = MiuiColors.SecondaryText
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteVehicle(vehicle)
-                        vehicleToDelete = null
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("删除", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { vehicleToDelete = null }) {
-                    Text("取消", color = MiuiColors.SecondaryText)
-                }
-            }
+            onDismiss = { vehicleToDelete = null }
         )
     }
 
-    // 恢复确认对话框
+    // 恢复备份
     selectedRestoreUri?.let { uri ->
-        AlertDialog(
-            onDismissRequest = { selectedRestoreUri = null },
-            title = {
-                Text(
-                    text = "确认恢复备份？",
-                    fontWeight = FontWeight.Bold,
-                    color = MiuiColors.Text
-                )
-            },
-            text = {
-                Text(
-                    text = "恢复备份将覆盖当前的所有车辆和加油记录，此操作无法撤销。是否继续？",
-                    color = MiuiColors.SecondaryText
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        selectedRestoreUri = null
-                        coroutineScope.launch {
-                            try {
-                                BackupManager.restoreFromUri(context, uri)
-                                Toast.makeText(context, "数据恢复成功！", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "数据恢复失败: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("覆盖并恢复", fontWeight = FontWeight.Bold)
+        MiuiConfirmDialog(
+            title = "确认恢复备份？",
+            message = "恢复备份将覆盖当前的所有车辆和加油记录，此操作无法撤销。是否继续？",
+            confirmText = "覆盖并恢复",
+            onConfirm = {
+                selectedRestoreUri = null
+                coroutineScope.launch {
+                    try {
+                        BackupManager.restoreFromUri(context, uri)
+                        Toast.makeText(context, "数据恢复成功！", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "数据恢复失败: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { selectedRestoreUri = null }) {
-                    Text("取消", color = MiuiColors.SecondaryText)
-                }
-            }
+            onDismiss = { selectedRestoreUri = null }
         )
     }
 }
 
-// 车辆列表卡片组件
+// ============================================================
+// MIUI 卡片
+// ============================================================
+@Composable
+private fun MiuiCardLocal(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        content()
+    }
+}
+
+// ============================================================
+// 车辆卡片
+// ============================================================
 @Composable
 private fun VehicleItemCard(
     vehicle: Vehicle,
@@ -730,11 +827,7 @@ private fun VehicleItemCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    MiuiCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSelect)
-    ) {
+    MiuiCardLocal(modifier = Modifier.clickable(onClick = onSelect)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -746,35 +839,38 @@ private fun VehicleItemCard(
                     .size(38.dp)
                     .clip(CircleShape)
                     .background(
-                        if (vehicle.isCurrent) MiuiColors.Primary.copy(alpha = 0.12f)
-                        else MiuiColors.SecondaryText.copy(alpha = 0.08f)
+                        if (vehicle.isCurrent)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.DirectionsCar,
                     contentDescription = null,
-                    tint = if (vehicle.isCurrent) MiuiColors.Primary else MiuiColors.SecondaryText,
+                    tint = if (vehicle.isCurrent)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "${vehicle.brand} ${vehicle.series} ${vehicle.model}".trim(),
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MiuiColors.Text
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${vehicle.year}款 | ${vehicle.fuelType} (${vehicle.fuelGrade}) | 油箱 ${vehicle.tankCapacity}L",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MiuiColors.SecondaryText
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -787,42 +883,34 @@ private fun VehicleItemCard(
                 if (vehicle.isCurrent) {
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = MiuiColors.Primary.copy(alpha = 0.12f)
+                        color = MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
                             text = "当前使用",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MiuiColors.Primary,
-                            fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
-
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    IconButton(
-                        onClick = onEdit,
-                        modifier = Modifier.size(30.dp)
-                    ) {
+                    IconButton(onClick = onEdit, modifier = Modifier.size(30.dp)) {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = "编辑车辆",
-                            tint = MiuiColors.SecondaryText,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(30.dp)
-                    ) {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
                             contentDescription = "删除车辆",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -832,7 +920,9 @@ private fun VehicleItemCard(
     }
 }
 
-// 设置数据行组件
+// ============================================================
+// 设置操作行
+// ============================================================
 @Composable
 private fun SettingActionRow(
     icon: ImageVector,
@@ -856,74 +946,236 @@ private fun SettingActionRow(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(MiuiColors.Primary.copy(alpha = 0.08f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = MiuiColors.Primary,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
             }
-
             Spacer(modifier = Modifier.width(12.dp))
-
             Column {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MiuiColors.Text
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MiuiColors.SecondaryText
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-
         Text(
             text = "›",
-            style = MaterialTheme.typography.titleLarge,
-            color = MiuiColors.SecondaryText,
+            fontSize = 22.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 8.dp)
         )
     }
 }
+
+// ============================================================
+// "关于"里的一行
+// ============================================================
 @Composable
-private fun InstructionItem(
-    index: String,
+private fun AboutRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+
+}
+
+
+
+// ============================================================
+// MIUI 说明条目
+// ============================================================
+@Composable
+private fun MiuiInstructionItem(
+    index: Int,
     text: String
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // MD3 风格的序号徽章
         Box(
             modifier = Modifier
-                .size(24.dp)
+                .size(22.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = index,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.Bold
+                text = "$index",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 22.sp,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            lineHeight = 21.sp,
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+// ============================================================
+// MIUI 确认弹窗
+// ============================================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MiuiConfirmDialog(
+    title: String,
+    message: String,
+    confirmText: String = "确定",
+    dismissText: String = "取消",
+    confirmColor: Color? = null,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val effectiveConfirmColor = confirmColor ?: MaterialTheme.colorScheme.error
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp, bottom = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                )
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 28.dp)
+        ) {
+            // 标题
+            Text(
+                text = title,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // 内容
+            Text(
+                text = message,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(28.dp))
+
+            // 底部按钮: 横向两个, 各占一半
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 取消
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Text(
+                        text = dismissText,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // 确认
+                TextButton(
+                    onClick = onConfirm,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = effectiveConfirmColor.copy(alpha = 0.12f)
+                    )
+                ) {
+                    Text(
+                        text = confirmText,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = effectiveConfirmColor
+                    )
+                }
+            }
+        }
     }
 }

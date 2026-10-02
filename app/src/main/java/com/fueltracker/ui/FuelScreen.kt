@@ -33,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -64,15 +65,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-// MIUI / HyperOS 配色定义
-private val MiuiBackground = Color(0xFFF2F2F7)
-private val MiuiCard = Color(0xFFFFFFFF)
-private val MiuiInputBg = Color(0xFFF7F7F9)
-private val MiuiPrimary = Color(0xFF007AFF)
-private val MiuiTextPrimary = Color(0xFF1C1C1E)
-private val MiuiGray = Color(0xFF8E8E93)
-private val MiuiSelectionBg = Color(0xFFF2F2F7)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -220,7 +212,7 @@ fun FuelScreen(
     }
 
     Scaffold(
-        containerColor = MiuiBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -228,7 +220,7 @@ fun FuelScreen(
                         text = if (isEditMode) "编辑加油记录" else "记加油",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
-                        color = MiuiTextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
@@ -236,32 +228,31 @@ fun FuelScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
-                            tint = MiuiTextPrimary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MiuiBackground)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
         val currentVehicle = vehicle
         if (currentVehicle == null) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = MiuiPrimary)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             return@Scaffold
         }
 
-        // 主表单滚动区域
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MiuiBackground)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -270,28 +261,34 @@ fun FuelScreen(
             // 车辆信息卡片
             MiuixCard {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = "${currentVehicle.brand} ${currentVehicle.series}",
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
-                        color = MiuiTextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(text = currentVehicle.model, fontSize = 13.sp, color = MiuiGray)
-                        Text(text = "油箱容量 ${currentVehicle.tankCapacity} L", fontSize = 13.sp, color = MiuiGray)
+                        Text(
+                            text = currentVehicle.model,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "油箱容量 ${currentVehicle.tankCapacity} L",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
-            // 油品标号卡片
+            // 油品标号
             MiuixCard {
                 Row(
                     modifier = Modifier
@@ -302,41 +299,64 @@ fun FuelScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "油品标号", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MiuiTextPrimary)
-                        Text(text = " *", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                        Text(
+                            text = "油品标号",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = " *",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
-                    Text(text = fuelGrade, fontSize = 15.sp, color = MiuiPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = fuelGrade,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 
-            // 8 个核心输入/选项卡片（统一置于大白色背景卡片中）
+            // 输入区域
             MiuixCard {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 第一行：加油时间 (必填) + 当前公里数 (选填)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 4.dp)
+                            modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(text = "加油时间", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MiuiTextPrimary)
-                                Text(text = " *", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                                Text(
+                                    text = "加油时间",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = " *",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(56.dp)
-                                    .background(color = MiuiInputBg, shape = RoundedCornerShape(14.dp))
+                                    .background(
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = RoundedCornerShape(14.dp)
+                                    )
                                     .clickable { showDatePicker = true }
                                     .padding(horizontal = 14.dp),
                                 contentAlignment = Alignment.CenterStart
@@ -345,7 +365,7 @@ fun FuelScreen(
                                     text = formatDateTime(timestamp),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MiuiTextPrimary,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1
                                 )
                             }
@@ -361,7 +381,6 @@ fun FuelScreen(
                         )
                     }
 
-                    // 第二行：本次加油量 (必填) + 单价 (必填)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -386,7 +405,6 @@ fun FuelScreen(
                         )
                     }
 
-                    // 第三行：原价 (必填) + 优惠金额 (选填)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -410,7 +428,6 @@ fun FuelScreen(
                         )
                     }
 
-                    // 第四行：实际支付 (必填) + 加油后剩余 (选填)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -444,12 +461,12 @@ fun FuelScreen(
                     text = "计算结果：$fuelGrade · %.2f L × %.2f 元/L = %.2f 元，实付 %.2f 元"
                         .format(Locale.getDefault(), volumeValue, unitPriceValue, total, paid),
                     fontSize = 12.sp,
-                    color = MiuiGray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, top = 2.dp)
                 )
             }
 
-            // 勾选项卡片
+            // 勾选项
             MiuixCard {
                 Column(modifier = Modifier.padding(vertical = 4.dp)) {
                     MiuixCheckRow(
@@ -494,7 +511,7 @@ fun FuelScreen(
                 }
             }
 
-            // 备注卡片
+            // 备注
             MiuixCard {
                 MiuixInput(
                     value = note,
@@ -563,8 +580,8 @@ fun FuelScreen(
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(25.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MiuiPrimary,
-                    disabledContainerColor = Color(0xFFB0D5FF)
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
             ) {
                 Text(
@@ -609,7 +626,9 @@ private fun MiuixCard(modifier: Modifier = Modifier, content: @Composable () -> 
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MiuiCard),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()
@@ -632,10 +651,15 @@ private fun MiuixInput(
                 text = label,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = MiuiTextPrimary
+                color = MaterialTheme.colorScheme.onSurface
             )
             if (isRequired) {
-                Text(text = " *", fontSize = 12.sp, color = Color.Red, fontWeight = FontWeight.Bold)
+                Text(
+                    text = " *",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
@@ -645,16 +669,27 @@ private fun MiuixInput(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = MiuiTextPrimary),
-            suffix = { suffix?.let { Text(text = it, fontSize = 14.sp, color = MiuiTextPrimary) } },
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            suffix = {
+                suffix?.let {
+                    Text(
+                        text = it,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MiuiInputBg,
-                unfocusedContainerColor = MiuiInputBg,
-                disabledContainerColor = MiuiInputBg,
-                focusedBorderColor = MiuiPrimary,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = Color.Transparent,
-                cursorColor = MiuiPrimary
+                cursorColor = MaterialTheme.colorScheme.primary
             )
         )
     }
@@ -672,10 +707,14 @@ private fun MiuixCheckRow(checked: Boolean, text: String, onChecked: (Boolean) -
         Checkbox(
             checked = checked,
             onCheckedChange = onChecked,
-            colors = CheckboxDefaults.colors(checkedColor = MiuiPrimary)
+            colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
         )
         Spacer(Modifier.width(4.dp))
-        Text(text = text, fontSize = 14.sp, color = MiuiTextPrimary)
+        Text(
+            text = text,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -699,7 +738,9 @@ private fun <T> HyperWheelList(
 ) {
     val itemHeight = 38.dp
     val itemHeightPx = with(LocalDensity.current) { itemHeight.toPx() }
-    val initialIndex = remember(items, selectedValue) { items.indexOf(selectedValue).coerceAtLeast(0) }
+    val initialIndex = remember(items, selectedValue) {
+        items.indexOf(selectedValue).coerceAtLeast(0)
+    }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
 
@@ -731,7 +772,15 @@ private fun <T> HyperWheelList(
         modifier = modifier.height(itemHeight * visibleCount).fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(itemHeight).background(MiuiSelectionBg, RoundedCornerShape(10.dp)))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(itemHeight)
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    RoundedCornerShape(10.dp)
+                )
+        )
         LazyColumn(
             state = listState,
             flingBehavior = snapFlingBehavior,
@@ -742,12 +791,18 @@ private fun <T> HyperWheelList(
             items(items.size) { index ->
                 val isSelected = index == selectedIndex
                 val item = items[index]
-                Box(modifier = Modifier.fillMaxWidth().height(itemHeight), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(itemHeight),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
                         text = itemLabel(item),
                         fontSize = if (isSelected) 15.sp else 13.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) MiuiTextPrimary else MiuiGray
+                        color = if (isSelected)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -768,7 +823,9 @@ private fun HyperFuelGradePickerDialog(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
@@ -778,13 +835,27 @@ private fun HyperFuelGradePickerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "取消", fontSize = 15.sp, color = MiuiGray,
-                        modifier = Modifier.clickable { onDismiss() }.padding(8.dp)
+                        text = "取消",
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable { onDismiss() }
+                            .padding(8.dp)
                     )
-                    Text(text = "选择油品标号", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MiuiTextPrimary)
                     Text(
-                        text = "确定", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MiuiPrimary,
-                        modifier = Modifier.clickable { onSelected(selectedGrade) }.padding(8.dp)
+                        text = "选择油品标号",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "确定",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable { onSelected(selectedGrade) }
+                            .padding(8.dp)
                     )
                 }
                 Spacer(Modifier.height(8.dp))
@@ -806,7 +877,9 @@ private fun HyperDatePickerDialog(
     onSelected: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val initialCalendar = remember(initialTimestamp) { Calendar.getInstance().apply { timeInMillis = initialTimestamp } }
+    val initialCalendar = remember(initialTimestamp) {
+        Calendar.getInstance().apply { timeInMillis = initialTimestamp }
+    }
     var year by remember { mutableIntStateOf(initialCalendar.get(Calendar.YEAR)) }
     var month by remember { mutableIntStateOf(initialCalendar.get(Calendar.MONTH) + 1) }
     var day by remember { mutableIntStateOf(initialCalendar.get(Calendar.DAY_OF_MONTH)) }
@@ -827,7 +900,9 @@ private fun HyperDatePickerDialog(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
@@ -837,24 +912,38 @@ private fun HyperDatePickerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "取消", fontSize = 15.sp, color = MiuiGray,
-                        modifier = Modifier.clickable { onDismiss() }.padding(8.dp)
+                        text = "取消",
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable { onDismiss() }
+                            .padding(8.dp)
                     )
-                    Text(text = "选择加油时间", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MiuiTextPrimary)
                     Text(
-                        text = "确定", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MiuiPrimary,
-                        modifier = Modifier.clickable {
-                            val cal = Calendar.getInstance().apply {
-                                set(Calendar.YEAR, year)
-                                set(Calendar.MONTH, month - 1)
-                                set(Calendar.DAY_OF_MONTH, day)
-                                set(Calendar.HOUR_OF_DAY, 0)
-                                set(Calendar.MINUTE, 0)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
+                        text = "选择加油时间",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "确定",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable {
+                                val cal = Calendar.getInstance().apply {
+                                    set(Calendar.YEAR, year)
+                                    set(Calendar.MONTH, month - 1)
+                                    set(Calendar.DAY_OF_MONTH, day)
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                }
+                                onSelected(cal.timeInMillis)
                             }
-                            onSelected(cal.timeInMillis)
-                        }.padding(8.dp)
+                            .padding(8.dp)
                     )
                 }
                 Spacer(Modifier.height(8.dp))
@@ -864,15 +953,21 @@ private fun HyperDatePickerDialog(
                 ) {
                     HyperWheelList(
                         selectedValue = year, items = years, visibleCount = 5,
-                        modifier = Modifier.weight(1.2f), itemLabel = { "${it}年" }, onChange = { year = it }
+                        modifier = Modifier.weight(1.2f),
+                        itemLabel = { "${it}年" },
+                        onChange = { year = it }
                     )
                     HyperWheelList(
                         selectedValue = month, items = months, visibleCount = 5,
-                        modifier = Modifier.weight(1f), itemLabel = { "${it}月" }, onChange = { month = it }
+                        modifier = Modifier.weight(1f),
+                        itemLabel = { "${it}月" },
+                        onChange = { month = it }
                     )
                     HyperWheelList(
                         selectedValue = day, items = days, visibleCount = 5,
-                        modifier = Modifier.weight(1f), itemLabel = { "${it}日" }, onChange = { day = it }
+                        modifier = Modifier.weight(1f),
+                        itemLabel = { "${it}日" },
+                        onChange = { day = it }
                     )
                 }
             }

@@ -1,32 +1,28 @@
 package com.fueltracker.ui.miui
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-
+/**
+ * MIUI 语义色, 全部映射到 Material3 主题色, 自动适配深浅色.
+ * 调用处写法不变: MiuiColors.Primary / MiuiColors.Text / ...
+ */
 object MiuiColors {
 
+    val Background: Color
+        @Composable get() = MaterialTheme.colorScheme.background
 
-    val Background =
-        Color(0xFFF5F5F5)
+    val Primary: Color
+        @Composable get() = MaterialTheme.colorScheme.primary
 
+    val Text: Color
+        @Composable get() = MaterialTheme.colorScheme.onSurface
 
-    val Card =
-        Color.White
+    val SecondaryText: Color
+        @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 
-
-    val Primary =
-        Color(0xFF1677FF)
-
-
-    val Text =
-        Color(0xFF191919)
-
-
-    val SecondaryText =
-        Color(0xFF8A8A8A)
-
-
-    val White =
-        Color.White
-
+    /** 主按钮上的白色文字; 深色下也走主题, 一般是白色/深色 */
+    val White: Color
+        @Composable get() = MaterialTheme.colorScheme.onPrimary
 }

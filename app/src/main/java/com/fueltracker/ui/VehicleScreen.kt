@@ -29,6 +29,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,17 +52,11 @@ import androidx.compose.ui.unit.sp
 import com.fueltracker.data.CarBrand
 import com.fueltracker.data.CarDatabase
 import com.fueltracker.data.Vehicle
-import com.fueltracker.ui.miui.MuiXBgColor
 import com.fueltracker.ui.miui.MuiXBottomSheetDialog
-import com.fueltracker.ui.miui.MuiXCardColor
 import com.fueltracker.ui.miui.MuiXClickableItem
-import com.fueltracker.ui.miui.MuiXDividerColor
 import com.fueltracker.ui.miui.MuiXGroupCard
 import com.fueltracker.ui.miui.MuiXInputItem
-import com.fueltracker.ui.miui.MuiXPrimaryColor
 import com.fueltracker.ui.miui.MuiXSectionHeader
-import com.fueltracker.ui.miui.MuiXTextPrimary
-import com.fueltracker.ui.miui.MuiXTextSecondary
 import com.fueltracker.ui.miui.MuiXWheelPickerBottomSheet
 import com.fueltracker.ui.miui.MuiXWheelPickerColumn
 import com.fueltracker.viewmodel.MainViewModel
@@ -81,7 +75,6 @@ private val YearOptions = (2005..Calendar.getInstance().get(Calendar.YEAR) + 1)
     .reversed()
 private val MonthOptions = (1..12).map { "${it}月" }
 
-/** 车型库返回的 energyType 可能叫"插电式混动"/"油电混动", 统一成 UI 里用的短名 */
 private fun normalizeEnergyType(raw: String): String {
     if (raw.isBlank()) return ""
     return when {
@@ -95,7 +88,6 @@ private fun normalizeEnergyType(raw: String): String {
     }
 }
 
-/** 车型库返回的 fuelGrade 形如 "92号"/"0号", 转成 UI 里的 "92#"/"0# 柴油" */
 private fun normalizeFuelGrade(raw: String): String {
     if (raw.isBlank()) return ""
     val num = Regex("""(-?\d+)""").find(raw)?.groupValues?.get(1) ?: return raw
@@ -127,7 +119,6 @@ fun VehicleScreen(
     var allBrands by remember { mutableStateOf<List<CarBrand>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    // 预加载 catalog, 让品牌下拉能立刻用
     LaunchedEffect(Unit) {
         carDatabase.ensureCatalogLoaded()
         val list = carDatabase.brandsByLetter().flatMap { (l, brands) ->
@@ -161,7 +152,6 @@ fun VehicleScreen(
     }
     var deliveryDateMillis by remember(vehicle) { mutableStateOf(vehicle?.deliveryDate) }
 
-    // ★ 4 级联动选择器开关
     var showCarPicker by remember { mutableStateOf(false) }
     var pickerStartLevel by remember { mutableStateOf(PickerLevel.BRAND) }
 
@@ -181,7 +171,6 @@ fun VehicleScreen(
     }
 
     LaunchedEffect(fuelType) {
-        // 纯电动没有燃油标号, 清空即可
         if (fuelType == "纯电动") {
             fuelGrade = ""
             return@LaunchedEffect
@@ -203,13 +192,11 @@ fun VehicleScreen(
         derivedStateOf {
             brand.isNotBlank() &&
                     model.isNotBlank() &&
-                    // 纯电动车没有油箱, 允许空
                     (fuelType == "纯电动" || tankCapacity.toDoubleOrNull() != null) &&
                     initialOdometer.toDoubleOrNull() != null
         }
     }
 
-    // 点哪级都从"最靠前的空缺"开始; 数据齐了就按点击的级重选
     val openPicker: (PickerLevel) -> Unit = { target ->
         pickerStartLevel = when {
             brand.isBlank()  -> PickerLevel.BRAND
@@ -220,17 +207,12 @@ fun VehicleScreen(
         showCarPicker = true
     }
 
-    // ============================================================
-    // ★ 4 级联动选择器: 点"品牌"进来, 选完自动填 brand/series/model/year/三字段
-    // ============================================================
-
     if (showCarPicker) {
         BackHandler { showCarPicker = false }
         CarPickerFlow(
             startLevel = pickerStartLevel,
             initialBrand = brand,
             initialSeries = series,
-            // VehicleScreen 里是 "2026年", picker 里是 "2026款", 转换一下
             initialYear = year.removeSuffix("年").trim().let {
                 if (it.isEmpty()) "" else "${it}款"
             },
@@ -255,7 +237,6 @@ fun VehicleScreen(
                         }
                     }
                     is CarSelection.BrandSeriesYear -> {
-                        // ★ 手输年款: 品牌/车系/年款都填上, 车型留空
                         brand  = sel.brand
                         series = sel.series
                         val yNum = sel.year.removeSuffix("款").removeSuffix("年").trim()
@@ -279,11 +260,8 @@ fun VehicleScreen(
         return
     }
 
-    // ============================================================
-    // 表单主界面
-    // ============================================================
     Scaffold(
-        containerColor = MuiXBgColor,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -291,7 +269,7 @@ fun VehicleScreen(
                         text = if (isEditMode) "编辑车辆信息" else "添加新车辆",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MuiXTextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
@@ -299,12 +277,12 @@ fun VehicleScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
-                            tint = MuiXTextPrimary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MuiXBgColor
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
@@ -320,16 +298,17 @@ fun VehicleScreen(
 
             MuiXSectionHeader(title = "车辆详细信息")
             MuiXGroupCard {
-                // 1. 品牌 — 点击弹出 4 级联动
                 MuiXClickableItem(
                     label = "品牌",
                     value = brand.ifBlank { "点击从车型库选择" },
                     onClick = { openPicker(PickerLevel.BRAND) }
                 )
 
-                HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    thickness = 0.8.dp
+                )
 
-                // 2. 车系 — 保留手动输入 + 预置下拉
                 val currentBrandSeries = selectedBrand?.series ?: emptyList()
                 var seriesMenuExpanded by remember { mutableStateOf(false) }
 
@@ -339,18 +318,21 @@ fun VehicleScreen(
                         value = series.ifBlank { "点击从车型库选择" },
                         onClick = { openPicker(PickerLevel.SERIES) }
                     )
-                    HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        thickness = 0.8.dp
+                    )
 
                     if (currentBrandSeries.isNotEmpty()) {
                         Box(
                             modifier = Modifier
-                                .align(Alignment.CenterEnd)      // ← align 移到这里
+                                .align(Alignment.CenterEnd)
                                 .padding(end = 16.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ArrowDropDown,
                                 contentDescription = "选择预置车系",
-                                tint = MuiXTextSecondary,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clickable(
@@ -362,7 +344,7 @@ fun VehicleScreen(
                             DropdownMenu(
                                 expanded = seriesMenuExpanded,
                                 onDismissRequest = { seriesMenuExpanded = false },
-                                modifier = Modifier.background(MuiXCardColor)
+                                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
                             ) {
                                 currentBrandSeries.forEach { brandSeries ->
                                     DropdownMenuItem(
@@ -378,45 +360,55 @@ fun VehicleScreen(
                     }
                 }
 
-                HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    thickness = 0.8.dp
+                )
 
-                // 3. 车型
                 MuiXClickableItem(
                     label = "车型",
                     value = model.ifBlank { "点击从车型库选择" },
                     onClick = { openPicker(PickerLevel.TRIM) }
                 )
-                HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    thickness = 0.8.dp
+                )
 
-                // 4. 年款
                 MuiXClickableItem(
                     label = "年款",
                     value = year,
                     onClick = { openPicker(PickerLevel.YEAR) }
                 )
 
-                HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    thickness = 0.8.dp
+                )
 
-                // 5. 能源类型
                 MuiXClickableItem(
                     label = "能源类型",
                     value = fuelType,
                     onClick = { showFuelTypePickerSheet = true }
                 )
 
-                HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    thickness = 0.8.dp
+                )
 
-                // 6. 燃油标号(纯电动时隐藏)
                 if (fuelType != "纯电动") {
                     MuiXClickableItem(
                         label = "燃油标号",
                         value = fuelGrade.ifBlank { "未设置" },
                         onClick = { showFuelGradePickerSheet = true }
                     )
-                    HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        thickness = 0.8.dp
+                    )
                 }
 
-                // 7. 油箱容量(纯电动时隐藏)
                 if (fuelType != "纯电动") {
                     MuiXInputItem(
                         label = "油箱容量 (L)",
@@ -425,19 +417,23 @@ fun VehicleScreen(
                         placeholder = "例如：50",
                         keyboardType = KeyboardType.Decimal
                     )
-                    HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        thickness = 0.8.dp
+                    )
                 }
 
-                // 8. 提车日期
                 MuiXClickableItem(
                     label = "提车日期",
                     value = formattedDeliveryDate,
                     onClick = { showDatePickerSheet = true }
                 )
 
-                HorizontalDivider(color = MuiXDividerColor, thickness = 0.8.dp)
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    thickness = 0.8.dp
+                )
 
-                // 9. 提车里程
                 MuiXInputItem(
                     label = "提车里程 (km)",
                     value = initialOdometer,
@@ -449,7 +445,6 @@ fun VehicleScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // 保存按钮
             Button(
                 onClick = {
                     if (!canSave) return@Button
@@ -495,8 +490,8 @@ fun VehicleScreen(
                     .height(50.dp),
                 shape = RoundedCornerShape(25.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MuiXPrimaryColor,
-                    disabledContainerColor = MuiXPrimaryColor.copy(alpha = 0.4f)
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 ),
                 enabled = canSave
             ) {
@@ -504,7 +499,7 @@ fun VehicleScreen(
                     text = if (isEditMode) "保存修改" else "确认添加",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
 
@@ -512,7 +507,6 @@ fun VehicleScreen(
         }
     }
 
-    // ---- BottomSheet 弹窗 ----
     if (showYearPickerSheet) {
         MuiXWheelPickerBottomSheet(
             title = "选择年款",
@@ -623,7 +617,11 @@ private fun MuiXDateWheelPickerBottomSheet(
             horizontalArrangement = Arrangement.End
         ) {
             TextButton(onClick = onClear) {
-                Text("不选择（设为空）", color = Color(0xFFFF3B30), fontSize = 14.sp)
+                Text(
+                    "不选择（设为空）",
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 14.sp
+                )
             }
         }
 
@@ -654,16 +652,3 @@ private fun MuiXDateWheelPickerBottomSheet(
     }
 }
 
-@Composable
-fun AddVehicleScreen(
-    viewModel: MainViewModel,
-    onBack: () -> Unit,
-    onVehicleAdded: () -> Unit
-) {
-    VehicleScreen(
-        viewModel = viewModel,
-        vehicle = null,
-        onBack = onBack,
-        onSaved = onVehicleAdded
-    )
-}

@@ -1,0 +1,109 @@
+package com.fueltracker.ui.miui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+
+
+/**
+ * 普通主按钮
+ */
+@Composable
+fun MiuiButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .background(
+                color = MiuiColors.Primary,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable {
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = MiuiColors.White,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/**
+ * 带图标的文字按钮
+ */
+@Composable
+fun MiuiTextIconButton(
+    text: String,
+    icon: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clickable {
+                onClick()
+            }
+            .padding(
+                horizontal = 8.dp,
+                vertical = 6.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = icon,
+            fontSize = 18.sp
+        )
+
+        Text(
+            text = text,
+            fontSize = 14.sp,
+            color = MiuiColors.Primary,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/**
+ * MIUI 风格文字链接按钮
+ */
+@Composable
+fun MiuiLinkButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    Text(
+        text = text,
+        color = MiuiColors.Primary,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .clickable {
+                onClick()
+            }
+            .padding(
+                horizontal = 8.dp,
+                vertical = 6.dp
+            )
+    )
+}

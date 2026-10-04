@@ -1,11 +1,17 @@
 package com.fueltracker
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import com.fueltracker.ui.theme.FuelTrackerTheme
+import com.fueltracker.ui.theme.ThemeMode
 import com.fueltracker.ui.theme.ThemePreferences
 import com.fueltracker.viewmodel.MainViewModel
 
@@ -16,15 +22,31 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1) 启动时从 SharedPreferences 读一次
         ThemePreferences.init(applicationContext)
-
-        // 2) 边到边(只调一次, 放 setContent 之前或之内都行)
         enableEdgeToEdge()
 
-        // 3) 单层 setContent, 一次 FuelTrackerTheme
         setContent {
-            FuelTrackerTheme(themeMode = ThemePreferences.mode) {
+            val themeMode = ThemePreferences.mode
+
+            val isDark = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT  -> false
+                ThemeMode.DARK   -> true
+            }
+
+            // ★ 关键: 让状态栏图标颜色跟随主题
+            val view = LocalView.current
+            if (!view.isInEditMode) {
+                SideEffect {
+                    val window = (view.context as Activity).window
+                    WindowCompat.getInsetsController(window, view).apply {
+                        isAppearanceLightStatusBars = !isDark   // 亮色主题→深色图标
+                        isAppearanceLightNavigationBars = !isDark
+                    }
+                }
+            }
+
+            FuelTrackerTheme(themeMode = themeMode) {
                 FuelTrackerApp(viewModel = viewModel)
             }
         }

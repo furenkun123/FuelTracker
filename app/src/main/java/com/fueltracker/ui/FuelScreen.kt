@@ -1,6 +1,5 @@
 package com.fueltracker.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -726,7 +725,6 @@ private fun formatDateTime(timestamp: Long): String {
     return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timestamp))
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun <T> HyperWheelList(
     selectedValue: T,

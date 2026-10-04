@@ -313,8 +313,7 @@ object FuelCalculator {
     )
 
     private fun isFuelVisible(record: FuelRecord, deliveryDate: Long?): Boolean {
-        if (record.isInitialRecord) return false
-        return deliveryDate == null || record.timestamp >= deliveryDate
+        return !record.isInitialRecord && (deliveryDate == null || record.timestamp >= deliveryDate)
     }
 
     private fun hasInvalidOdometer(record: FuelRecord): Boolean {
@@ -424,12 +423,12 @@ object FuelCalculator {
 
         var weightSum = 0.0
         var weightedSum = 0.0
-        for (r in kept) {
-            val confidence = (r.quality?.confidenceScore ?: if (r.isEstimated) 0.50 else 1.0)
+        for ((_, _, _, distance, _, consumption, isEstimated, _, quality) in kept) {
+            val confidence = (quality?.confidenceScore ?: if (isEstimated) 0.50 else 1.0)
                 .coerceIn(0.05, 1.0)
-            val w = confidence * sqrt(r.distance.coerceAtLeast(1.0))
+            val w = confidence * sqrt(distance.coerceAtLeast(1.0))
             weightSum += w
-            weightedSum += r.consumption * w
+            weightedSum += consumption * w
         }
 
         return if (weightSum > 0) weightedSum / weightSum else null

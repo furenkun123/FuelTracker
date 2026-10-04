@@ -1,13 +1,11 @@
 package com.fueltracker.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -66,7 +65,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import androidx.compose.material3.MaterialTheme
 
 
 private val recordDateFormat by lazy {
@@ -123,7 +121,7 @@ fun RecordsScreen(
                     val c = Calendar.getInstance().apply { timeInMillis = it.timestamp }
                     val matchYear = c.get(Calendar.YEAR) == selectedYear
                     val matchMonth = (c.get(Calendar.MONTH) + 1) == selectedMonth
-                    val matchDay = if (selectedDay == 0) true else c.get(Calendar.DAY_OF_MONTH) == selectedDay
+                    val matchDay = selectedDay == 0 || c.get(Calendar.DAY_OF_MONTH) == selectedDay
                     matchYear && matchMonth && matchDay
                 }
             }
@@ -243,6 +241,9 @@ private fun MiuixCard(
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .then(modifier),
         shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()
@@ -396,11 +397,7 @@ private fun FilterCapsule(
     }
 }
 
-// =================================================
 // 加油记录卡片
-// =================================================
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FuelRecordCard(
     record: FuelRecord,
@@ -708,7 +705,6 @@ private fun DatePicker3WheelSheet(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun <T> HyperWheelList(
     selectedValue: T,

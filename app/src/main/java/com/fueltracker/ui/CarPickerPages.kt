@@ -28,7 +28,6 @@ import com.fueltracker.data.Trim
 // ============================================================
 // 车系
 // ============================================================
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SeriesSelectorScreen(
     brand: String,
@@ -94,7 +93,6 @@ fun SeriesSelectorScreen(
 // ============================================================
 // 年款
 // ============================================================
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun YearSelectorScreen(
     brand: String,
@@ -152,7 +150,6 @@ fun YearSelectorScreen(
 // ============================================================
 // 车型
 // ============================================================
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrimSelectorScreen(
     brand: String,

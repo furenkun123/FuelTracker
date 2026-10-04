@@ -6,10 +6,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,7 +47,6 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -78,15 +83,9 @@ import com.fueltracker.data.Vehicle
 import com.fueltracker.ui.theme.ThemeMode
 import com.fueltracker.ui.theme.ThemePreferences
 import com.fueltracker.util.BackupManager
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.gestures.animateScrollBy
 
 private val ExpandSpec = expandVertically(
     animationSpec = tween(
@@ -531,7 +530,7 @@ fun SettingsScreen(
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "版本信息、使用说明、网盘更新与开发者联系",
+                                            text = "版本信息、使用说明、更新",
                                             fontSize = 12.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -668,23 +667,7 @@ fun SettingsScreen(
                                                 }
                                             }
                                         )
-                                        HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                            thickness = 0.6.dp
-                                        )
-                                        AboutRow(
-                                            title = "联系我",
-                                            subtitle = "QQ与我联系",
-                                            icon = Icons.Default.Person,
-                                            onClick = {
-                                                val url = "https://qm.qq.com/q/MEBXIAFnSm"
-                                                try {
-                                                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-                                                } catch (_: Exception) {
-                                                    Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        )
+
                                         HorizontalDivider(
                                             color = MaterialTheme.colorScheme.surfaceVariant,
                                             thickness = 0.6.dp

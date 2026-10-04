@@ -1,6 +1,5 @@
 package com.fueltracker.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
@@ -560,7 +559,6 @@ private fun HyperWheelMonthPickerDialog(
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun <T> HyperWheelList(
     selectedValue: T,

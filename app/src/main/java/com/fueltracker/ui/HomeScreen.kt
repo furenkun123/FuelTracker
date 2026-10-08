@@ -63,12 +63,7 @@ fun HomeScreen(
         } else {
             records
         }
-        valid.sortedWith { a, b ->
-            val odoA = a.odometer ?: 0.0
-            val odoB = b.odometer ?: 0.0
-            val odoCompare = odoB.compareTo(odoA)
-            if (odoCompare != 0) odoCompare else b.timestamp.compareTo(a.timestamp)
-        }
+        valid.sortedByDescending { it.timestamp }
     }
 
     val fuelRecords = remember(sortedRecords) {
@@ -453,7 +448,7 @@ private fun ChartCard(
 @Composable
 private fun HomeFuelRecordItem(record: FuelRecord) {
     val timeText = remember<String>(record.timestamp) {
-        SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(record.timestamp))
+        SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(record.timestamp))
     }
 
     val singleConsumption = record.consumption

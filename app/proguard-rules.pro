@@ -28,6 +28,12 @@
     @kotlinx.serialization.Serializable <init>(...);
     *** Companion;
 }
+# 禁止 R8 重命名类名/方法名/字段名
+-dontobfuscate
+
+# 保留行号, 崩溃日志可读
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
 # ===================================================================
 # 3. 补充说明 (已移除第三方库全量 Keep)

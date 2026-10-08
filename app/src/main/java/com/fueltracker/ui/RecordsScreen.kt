@@ -68,7 +68,7 @@ import java.util.Locale
 
 
 private val recordDateFormat by lazy {
-    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -551,7 +551,7 @@ private fun FuelRecordCard(
                         Text("仪表盘里程: ${odometer.toInt()} km", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     record.remainingFuel?.let { remaining ->
-                        Text("加油前剩余: %.2f L".format(remaining), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("加油后剩余: %.2f L".format(remaining), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (record.hasMissedRecord) {
                         Text("漏记数据: 约 ${record.missedOdometer ?: 0.0} km / ${record.missedVolume ?: 0.0} L", fontSize = 11.sp, color = Color(0xFFFF9500))

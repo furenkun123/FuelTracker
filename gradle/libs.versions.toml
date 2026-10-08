@@ -9,6 +9,7 @@ composeBom = "2026.02.01"
 room = "2.8.5"
 ksp = "2.3.6"
 material3 = "1.4.0"
+uiTest = "1.12.1"
 
 
 [libraries]
@@ -32,6 +33,7 @@ androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref =
 # Ktor
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+androidx-compose-ui-test = { group = "androidx.compose.ui", name = "ui-test", version.ref = "uiTest" }
 
 
 [plugins]

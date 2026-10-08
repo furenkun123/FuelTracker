@@ -1,5 +1,6 @@
 package com.fueltracker.ui
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,6 +59,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,6 +89,9 @@ fun FuelScreen(
     val isEditMode = record != null
     val vehicle by viewModel.currentVehicle.collectAsState()
     val tankCapacity = vehicle?.tankCapacity ?: 0.0
+
+    // 格式化日期 Formatter 缓存，避免反复重组重复创建
+    val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
 
     val defaultFuelGrade = remember(vehicle, record) {
         val rawGrade = record?.fuelGrade?.takeIf { it.isNotBlank() }
@@ -124,21 +129,38 @@ fun FuelScreen(
     var missedVolume by remember(record) { mutableStateOf(record?.missedVolume?.let { formatNumber(it) } ?: "") }
     var note by remember(record) { mutableStateOf(record?.note ?: "") }
 
-    val volumeValue = volume.toDoubleOrNull()
-    val amountValue = amount.toDoubleOrNull()
-    val unitPriceValue = unitPrice.toDoubleOrNull()
-    val remainingFuelValue = remainingFuel.toDoubleOrNull()
+    // 使用 derivedStateOf 避免每次界面小改动都反复 parse 文本
+    val volumeValue by remember(volume) { derivedStateOf { volume.toDoubleOrNull() } }
+    val amountValue by remember(amount) { derivedStateOf { amount.toDoubleOrNull() } }
+    val unitPriceValue by remember(unitPrice) { derivedStateOf { unitPrice.toDoubleOrNull() } }
+    val remainingFuelValue by remember(remainingFuel) { derivedStateOf { remainingFuel.toDoubleOrNull() } }
 
-    val missedOdometerValue = missedOdometer.toDoubleOrNull()?.takeIf { it > 0 }
-    val missedVolumeValue = missedVolume.toDoubleOrNull()
+    val missedOdometerValue by remember(missedOdometer) { derivedStateOf { missedOdometer.toDoubleOrNull()?.takeIf { it > 0 } } }
+    val missedVolumeValue by remember(missedVolume) { derivedStateOf { missedVolume.toDoubleOrNull() } }
 
-    val isMissedValid = !hasMissedRecord || (missedOdometerValue != null && missedVolumeValue != null)
-    val isVolumeValid = volumeValue != null && volumeValue > 0 && (tankCapacity <= 0.0 || volumeValue <= tankCapacity)
-    val isFormValid = isVolumeValid && amountValue != null && amountValue >= 0 && unitPriceValue != null && unitPriceValue > 0 && fuelGrade.isNotBlank() && isMissedValid
+    // 判断加油量是否超出油箱容量
+    val isVolumeExceedsCapacity by remember(volumeValue, tankCapacity) {
+        derivedStateOf { volumeValue != null && tankCapacity > 0.0 && volumeValue!! > tankCapacity }
+    }
 
+    val isMissedValid by remember(hasMissedRecord, missedOdometerValue, missedVolumeValue) {
+        derivedStateOf { !hasMissedRecord || (missedOdometerValue != null && missedVolumeValue != null) }
+    }
+
+    val isVolumeValid by remember(volumeValue, isVolumeExceedsCapacity) {
+        derivedStateOf { volumeValue != null && volumeValue!! > 0 && !isVolumeExceedsCapacity }
+    }
+
+    val isFormValid by remember(isVolumeValid, amountValue, unitPriceValue, fuelGrade, isMissedValid) {
+        derivedStateOf {
+            isVolumeValid && amountValue != null && amountValue!! >= 0 &&
+                    unitPriceValue != null && unitPriceValue!! > 0 &&
+                    fuelGrade.isNotBlank() && isMissedValid
+        }
+    }
+
+    // 联动计算逻辑
     fun onVolumeChange(newVol: String) {
-        val value = newVol.toDoubleOrNull()
-        if (value != null && tankCapacity > 0.0 && value > tankCapacity) return
         volume = newVol
         val v = newVol.toDoubleOrNull()
         val p = unitPrice.toDoubleOrNull()
@@ -365,7 +387,7 @@ fun FuelScreen(
                                 contentAlignment = Alignment.CenterStart
                             ) {
                                 Text(
-                                    text = formatDateTime(timestamp),
+                                    text = remember(timestamp) { dateFormatter.format(Date(timestamp)) },
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -379,7 +401,7 @@ fun FuelScreen(
                             onValueChange = { odometer = it },
                             label = "当前公里数",
                             suffix = "km",
-                            keyboardType = KeyboardType.Number,
+                            keyboardType = KeyboardType.Decimal, // 优化：里程数改为 Decimal
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -394,6 +416,8 @@ fun FuelScreen(
                             label = "本次加油量",
                             isRequired = true,
                             suffix = "L",
+                            isError = isVolumeExceedsCapacity,
+                            errorMessage = if (isVolumeExceedsCapacity) "超出容量(${tankCapacity}L)" else null,
                             keyboardType = KeyboardType.Decimal,
                             modifier = Modifier.weight(1f)
                         )
@@ -456,13 +480,15 @@ fun FuelScreen(
                 }
             }
 
-            if (volumeValue != null && volumeValue > 0 && unitPriceValue != null && unitPriceValue > 0) {
-                val total = volumeValue * unitPriceValue
+            val vVal = volumeValue
+            val pVal = unitPriceValue
+            if (vVal != null && vVal > 0 && pVal != null && pVal > 0) {
+                val total = vVal * pVal
                 val disc = discount.toDoubleOrNull() ?: 0.0
                 val paid = (total - disc).coerceAtLeast(0.0)
                 Text(
                     text = "计算结果：$fuelGrade · %.2f L × %.2f 元/L = %.2f 元，实付 %.2f 元"
-                        .format(LocalLocale.current.platformLocale, volumeValue, unitPriceValue, total, paid),
+                        .format(LocalLocale.current.platformLocale, vVal, pVal, total, paid),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, top = 2.dp)
@@ -485,9 +511,9 @@ fun FuelScreen(
                     MiuixCheckRow(
                         checked = hasMissedRecord,
                         text = "上次加油忘记记录 (漏记)",
-                        onChecked = {
-                            hasMissedRecord = it
-                            if (!it) {
+                        onChecked = { checked ->
+                            hasMissedRecord = checked
+                            if (!checked) {
                                 missedOdometer = ""
                                 missedVolume = ""
                             }
@@ -536,9 +562,9 @@ fun FuelScreen(
             Button(
                 onClick = {
                     val odo = odometer.toDoubleOrNull()?.takeIf { it > 0 }
-                    val vol = volume.toDoubleOrNull() ?: return@Button
-                    val amt = amount.toDoubleOrNull() ?: return@Button
-                    val price = unitPrice.toDoubleOrNull() ?: return@Button
+                    val vol = volumeValue ?: return@Button
+                    val amt = amountValue ?: return@Button
+                    val price = unitPriceValue ?: return@Button
 
                     val recordToSave = if (isEditMode) {
                         record.copy(
@@ -654,6 +680,8 @@ private fun MiuixInput(
     label: String,
     modifier: Modifier = Modifier,
     isRequired: Boolean = false,
+    isError: Boolean = false,
+    errorMessage: String? = null,
     suffix: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text
 ) {
@@ -680,6 +708,7 @@ private fun MiuixInput(
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            isError = isError,
             shape = RoundedCornerShape(14.dp),
             textStyle = androidx.compose.ui.text.TextStyle(
                 fontSize = 14.sp,
@@ -701,9 +730,18 @@ private fun MiuixInput(
                 disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = Color.Transparent,
+                errorBorderColor = MaterialTheme.colorScheme.error,
                 cursorColor = MaterialTheme.colorScheme.primary
             )
         )
+        if (isError && errorMessage != null) {
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+            )
+        }
     }
 }
 
@@ -718,10 +756,10 @@ private fun MiuixCheckRow(checked: Boolean, text: String, onChecked: (Boolean) -
     ) {
         Checkbox(
             checked = checked,
-            onCheckedChange = onChecked,
+            onCheckedChange = null, // 优化：设为 null，避免复选框与外层 Row 点击冲突
             colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
         )
-        Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
             text = text,
             fontSize = 14.sp,
@@ -736,10 +774,6 @@ private fun MiuixCheckRow(checked: Boolean, text: String, onChecked: (Boolean) -
 
 private fun formatNumber(value: Double): String {
     return if (value <= 0.0) "" else String.format(Locale.US, "%.2f", value)
-}
-
-private fun formatDateTime(timestamp: Long): String {
-    return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
 }
 
 // ============================================================
@@ -845,7 +879,6 @@ private fun buildMonthGrid(year: Int, month: Int): List<DayCell> {
         cells.add(DayCell(year, month, d, true))
     }
 
-    // 不再补下个月
     return cells
 }
 
@@ -928,7 +961,7 @@ private fun MiuiCalendar(
             }
         }
 
-        // 日期网格: 行数动态
+        // 日期网格
         val rowCount = (cells.size + 6) / 7
         for (row in 0 until rowCount) {
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -1306,6 +1339,7 @@ private fun HyperDatePickerDialog(
 // 滚轮选择
 // ============================================================
 
+@SuppressLint("FrequentlyChangingValue")
 @Composable
 private fun <T> HyperWheelList(
     selectedValue: T,
@@ -1327,27 +1361,26 @@ private fun <T> HyperWheelList(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
 
-    val selectedIndex by remember {
-        derivedStateOf {
-            val firstVisible = listState.firstVisibleItemIndex
-            val offset = listState.firstVisibleItemScrollOffset
-            if (offset > itemHeightPx / 2f) firstVisible + 1 else firstVisible
-        }
+    // 优化防抖：使用 snapshotFlow 仅在滚动停止时触发状态改变，避免连续更新导致滑动抖动
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { isScrolling ->
+                if (!isScrolling) {
+                    val firstVisible = listState.firstVisibleItemIndex
+                    val offset = listState.firstVisibleItemScrollOffset
+                    val centerIndex = if (offset > itemHeightPx / 2f) firstVisible + 1 else firstVisible
+                    if (centerIndex in items.indices && items[centerIndex] != selectedValue) {
+                        onChange(items[centerIndex])
+                    }
+                }
+            }
     }
 
+    // 当外部 selectedValue 改变时同步滚轮位置
     LaunchedEffect(selectedValue, items) {
         val targetIndex = items.indexOf(selectedValue).coerceAtLeast(0)
-        if (targetIndex in items.indices && targetIndex != selectedIndex) {
+        if (targetIndex in items.indices && targetIndex != listState.firstVisibleItemIndex) {
             listState.scrollToItem(targetIndex)
-        }
-    }
-
-    LaunchedEffect(selectedIndex) {
-        if (selectedIndex in items.indices) {
-            val item = items[selectedIndex]
-            if (item != selectedValue) {
-                onChange(item)
-            }
         }
     }
 
@@ -1363,7 +1396,8 @@ private fun <T> HyperWheelList(
             modifier = Modifier.fillMaxSize()
         ) {
             items(items.size) { index ->
-                val isSelected = index == selectedIndex
+                val isSelected = index == (listState.firstVisibleItemIndex +
+                        if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2f) 1 else 0)
                 val item = items[index]
                 Box(
                     modifier = Modifier
@@ -1373,10 +1407,10 @@ private fun <T> HyperWheelList(
                 ) {
                     Text(
                         text = itemLabel(item),
-                        fontSize = if (isSelected) 16.sp else 13.sp,   // ★ 差距拉大
+                        fontSize = if (isSelected) 16.sp else 13.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSelected)
-                            MaterialTheme.colorScheme.primary           // ★ 选中项用主题色
+                            MaterialTheme.colorScheme.primary
                         else
                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
                     )

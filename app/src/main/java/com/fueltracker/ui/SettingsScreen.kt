@@ -1,6 +1,9 @@
 package com.fueltracker.ui
 
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -66,6 +70,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,22 +88,25 @@ import com.fueltracker.data.Vehicle
 import com.fueltracker.ui.theme.ThemeMode
 import com.fueltracker.ui.theme.ThemePreferences
 import com.fueltracker.util.BackupManager
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.withContext
+
+// ============================================================
+// 动画规格
+// ============================================================
+
+private const val ExpandDurationMs = 380
+private const val ScrollDelayMs: Long = ExpandDurationMs.toLong() + 40L
 
 private val ExpandSpec = expandVertically(
-    animationSpec = tween(
-        durationMillis = 380,
-        easing = FastOutSlowInEasing
-    )
+    animationSpec = tween(durationMillis = ExpandDurationMs, easing = FastOutSlowInEasing)
 )
 
 private val ShrinkSpec = shrinkVertically(
-    animationSpec = tween(
-        durationMillis = 300,
-        easing = FastOutSlowInEasing
-    )
+    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
 )
 
 private val FadeInSpec = fadeIn(
@@ -108,6 +116,18 @@ private val FadeInSpec = fadeIn(
 private val FadeOutSpec = fadeOut(
     animationSpec = tween(durationMillis = 180)
 )
+
+// ============================================================
+// LazyColumn 稳定 Key
+// ============================================================
+
+private const val KeyDataSection = "section_data"
+private const val KeyThemeSection = "section_theme"
+private const val KeyAboutSection = "section_about"
+
+// ============================================================
+// SettingsScreen
+// ============================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,34 +142,52 @@ fun SettingsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var vehicleToDelete by remember { mutableStateOf<Vehicle?>(null) }
-    var selectedRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    var isDataExpanded by remember { mutableStateOf(false) }
-    var isAboutExpanded by remember { mutableStateOf(false) }
-    var isThemeExpanded by remember { mutableStateOf(false) }
-    var isInstructionsExpanded by remember { mutableStateOf(false) }
+    var vehicleToDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var selectedRestoreUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+
+    var isDataExpanded by rememberSaveable { mutableStateOf(false) }
+    var isThemeExpanded by rememberSaveable { mutableStateOf(false) }
+    var isAboutExpanded by rememberSaveable { mutableStateOf(false) }
+    var isInstructionsExpanded by rememberSaveable { mutableStateOf(false) }
+
+    var currentThemeMode by remember { mutableStateOf(ThemePreferences.mode) }
+    var isBackupOperationRunning by rememberSaveable { mutableStateOf(false) }
+
     val listState = rememberLazyListState()
 
+    // 导出备份
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
-        if (uri != null) {
-            coroutineScope.launch {
-                try {
-                    BackupManager.writeBackupToUri(context, uri)
+        if (uri == null) return@rememberLauncherForActivityResult
+
+        isBackupOperationRunning = true
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                BackupManager.writeBackupToUri(context, uri)
+                withContext(Dispatchers.Main) {
+                    isBackupOperationRunning = false
                     Toast.makeText(context, "备份导出成功", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    isBackupOperationRunning = false
                     Toast.makeText(context, "导出失败: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
 
+    // 导入备份
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) {
+        if (uri == null) return@rememberLauncherForActivityResult
+
+        if (isJsonFile(context, uri)) {
             selectedRestoreUri = uri
+        } else {
+            Toast.makeText(context, "请选择 JSON 格式的备份文件", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -182,6 +220,7 @@ fun SettingsScreen(
             )
         )
 
+        // 内容区
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -190,7 +229,7 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ============ 车辆管理 ============
+            // 车辆管理标题栏
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
@@ -206,7 +245,11 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        TextButton(onClick = onAddVehicle) {
+
+                        TextButton(
+                            onClick = onAddVehicle,
+                            enabled = !isBackupOperationRunning
+                        ) {
                             Text(
                                 text = "＋ 添加车辆",
                                 color = MaterialTheme.colorScheme.primary,
@@ -235,533 +278,388 @@ fun SettingsScreen(
                 }
             }
 
-            items(vehicles, key = { it.id }) { vehicle ->
+            // 车辆列表
+            items(
+                items = vehicles,
+                key = { it.id },
+                contentType = { "vehicle" }
+            ) { vehicle ->
                 VehicleItemCard(
                     vehicle = vehicle,
-                    onSelect = { onSetCurrentVehicle(vehicle) },
-                    onEdit = { onEditVehicle(vehicle) },
-                    onDelete = { vehicleToDelete = vehicle }
+                    onSelect = {
+                        if (!isBackupOperationRunning) {
+                            onSetCurrentVehicle(vehicle)
+                        }
+                    },
+                    onEdit = {
+                        if (!isBackupOperationRunning) {
+                            onEditVehicle(vehicle)
+                        }
+                    },
+                    onDelete = {
+                        if (!isBackupOperationRunning) {
+                            vehicleToDeleteId = vehicle.id
+                        }
+                    }
                 )
             }
 
-            // ============ 数据管理 ============
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "数据管理",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+            // 数据管理
+            item(key = KeyDataSection) {
+                ExpandableSettingCard(
+                    icon = Icons.Default.Folder,
+                    title = "备份与恢复",
+                    subtitle = "导出或导入本地 JSON 数据备份文件",
+                    expanded = isDataExpanded,
+                    enabled = !isBackupOperationRunning,
+                    onExpandedChange = { isDataExpanded = !isDataExpanded }
+                ) {
+                    SettingActionRow(
+                        icon = Icons.Default.FileUpload,
+                        title = "导出本地备份",
+                        subtitle = "将车辆及所有加油记录导出为 JSON 文件",
+                        enabled = !isBackupOperationRunning,
+                        onClick = {
+                            exportLauncher.launch(BackupManager.generateFileName())
+                        }
                     )
 
-                    MiuiCardLocal {
-                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        thickness = 0.6.dp
+                    )
+
+                    SettingActionRow(
+                        icon = Icons.Default.FileDownload,
+                        title = "恢复本地备份",
+                        subtitle = "从本地备份文件中恢复数据并覆盖当前记录",
+                        enabled = !isBackupOperationRunning,
+                        onClick = {
+                            importLauncher.launch(arrayOf("application/json", "*/*"))
+                        }
+                    )
+
+                    if (isBackupOperationRunning) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            thickness = 0.6.dp
+                        )
+                        ProcessingRow()
+                    }
+                }
+            }
+
+            // 主题设置
+            item(key = KeyThemeSection) {
+                ExpandableSettingCard(
+                    icon = Icons.Default.Brightness6,
+                    title = "主题",
+                    subtitle = currentThemeMode.displayName,
+                    expanded = isThemeExpanded,
+                    enabled = !isBackupOperationRunning,
+                    onExpandedChange = { isThemeExpanded = !isThemeExpanded }
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        val selected = currentThemeMode == mode
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !isBackupOperationRunning) {
+                                    ThemePreferences.setMode(context, mode)
+                                    currentThemeMode = mode
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = mode.displayName,
+                                fontSize = 14.sp,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                            )
+
+                            if (selected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "已选中",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        if (mode != ThemeMode.entries.last()) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                thickness = 0.6.dp,
+                                modifier = Modifier.padding(start = 16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 关于应用
+            item(key = KeyAboutSection) {
+                ExpandableSettingCard(
+                    icon = Icons.Default.Info,
+                    title = "关于应用",
+                    subtitle = "版本信息、使用说明、更新",
+                    expanded = isAboutExpanded,
+                    enabled = !isBackupOperationRunning,
+                    onExpandedChange = {
+                        isAboutExpanded = !isAboutExpanded
+                    }
+                ) {
+
+                    // 关键：恢复原来的左右内边距
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 12.dp
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+
+                        // ==============================
+                        // 应用说明
+                        // ==============================
+
+                        Column {
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { isDataExpanded = !isDataExpanded }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .clickable(
+                                        enabled = !isBackupOperationRunning
+                                    ) {
+                                        isInstructionsExpanded =
+                                            !isInstructionsExpanded
+                                    }
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween,
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
+
+                                Column(
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Folder,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "备份与恢复",
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "导出或导入本地 JSON 数据备份文件",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    Text(
+                                        text = "应用说明",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color =
+                                            MaterialTheme.colorScheme.onSurface
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.height(2.dp)
+                                    )
+
+                                    Text(
+                                        text = "初次使用建议先阅读使用说明与功能指南",
+                                        fontSize = 12.sp,
+                                        color =
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
+
                                 Icon(
-                                    imageVector = if (isDataExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = if (isDataExpanded) "收起" else "展开",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    imageVector =
+                                        if (isInstructionsExpanded) {
+                                            Icons.Default.KeyboardArrowUp
+                                        } else {
+                                            Icons.Default.KeyboardArrowDown
+                                        },
+                                    contentDescription =
+                                        if (isInstructionsExpanded) {
+                                            "收起"
+                                        } else {
+                                            "展开"
+                                        },
+                                    tint =
+                                        MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
 
                             AnimatedVisibility(
-                                visible = isDataExpanded,
+                                visible = isInstructionsExpanded,
                                 enter = ExpandSpec + FadeInSpec,
                                 exit = ShrinkSpec + FadeOutSpec
                             ) {
-                                Column {
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        thickness = 0.6.dp
-                                    )
-                                    SettingActionRow(
-                                        icon = Icons.Default.FileUpload,
-                                        title = "导出本地备份",
-                                        subtitle = "将车辆及所有加油记录导出为 JSON 文件",
-                                        onClick = {
-                                            exportLauncher.launch(BackupManager.generateFileName())
-                                        }
-                                    )
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        thickness = 0.6.dp
-                                    )
-                                    SettingActionRow(
-                                        icon = Icons.Default.FileDownload,
-                                        title = "恢复本地备份",
-                                        subtitle = "从本地备份文件中恢复数据并覆盖当前记录",
-                                        onClick = {
-                                            importLauncher.launch(arrayOf("application/json", "*/*"))
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // ============ 显示 / 主题 ============
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "显示",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
 
-                    MiuiCardLocal {
-                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                            // 折叠/展开 头部栏
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { isThemeExpanded = !isThemeExpanded }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            top = 10.dp,
+                                            bottom = 4.dp
+                                        ),
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Brightness6,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "主题",
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = ThemePreferences.mode.displayName,
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    MiuiInstructionItem(1, "应用完全离线，一定注意备份")
+                                    MiuiInstructionItem(2, "完全依赖免费AI提供代码，所以开源。有兴趣的自己改，没发现明显Bug")
+                                    MiuiInstructionItem(3, "平均油耗使用多个逻辑相互计算减小误差，以“满箱到满箱”为基本计算单元")
+                                    MiuiInstructionItem(4, "车型筛选08款起还剩3000多个，应该比较全")
+                                    MiuiInstructionItem(5, "支持多车辆切换，暗色主题")
                                 }
-                                Icon(
-                                    imageVector = if (isThemeExpanded)
-                                        Icons.Default.KeyboardArrowUp
-                                    else
-                                        Icons.Default.KeyboardArrowDown,
-                                    contentDescription = if (isThemeExpanded) "收起" else "展开",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
+                        }
 
-                            // 展开内容区: 三个主题选项
-                            AnimatedVisibility(
-                                visible = isThemeExpanded,
-                                enter = expandVertically(
-                                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                                ) + fadeIn(
-                                    animationSpec = tween(300, delayMillis = 200)
-                                ),
-                                exit = shrinkVertically(
-                                    animationSpec = tween(300, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                                ) + fadeOut(animationSpec = tween(180))
-                            ) {
-                                Column {
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        thickness = 0.6.dp
+                        HorizontalDivider(
+                            color =
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            thickness = 0.6.dp
+                        )
+
+                        // ==============================
+                        // 查看更新
+                        // ==============================
+
+                        AboutRow(
+                            title = "查看更新",
+                            subtitle = "跳转网盘查看与下载最新安装包",
+                            icon = Icons.Default.CloudDownload,
+                            enabled = !isBackupOperationRunning,
+                            onClick = {
+                                val url =
+                                    "https://yun.139.com/shareweb/#/w/i/2xTrJEeQhKJ01"
+
+                                try {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            url.toUri()
+                                        )
                                     )
-                                    ThemeMode.entries.forEach { mode ->
-                                        val selected = ThemePreferences.mode == mode
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    ThemePreferences.setMode(context, mode)
-                                                }
-                                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(
-                                                text = mode.displayName,
-                                                fontSize = 14.sp,
-                                                color = if (selected)
-                                                    MaterialTheme.colorScheme.primary
-                                                else
-                                                    MaterialTheme.colorScheme.onSurface,
-                                                fontWeight = if (selected)
-                                                    FontWeight.Medium
-                                                else
-                                                    FontWeight.Normal
-                                            )
-                                            if (selected) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = "已选中",
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            } else {
-                                                Spacer(modifier = Modifier.size(18.dp))
-                                            }
-                                        }
-                                        if (mode != ThemeMode.entries.last()) {
-                                            HorizontalDivider(
-                                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                                thickness = 0.6.dp,
-                                                modifier = Modifier.padding(start = 16.dp)
-                                            )
-                                        }
-                                    }
+                                } catch (_: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "无法打开网盘链接",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             }
+                        )
+
+                        HorizontalDivider(
+                            color =
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            thickness = 0.6.dp
+                        )
+
+                        // ==============================
+                        // GitHub
+                        // ==============================
+
+                        AboutRow(
+                            title = "GitHub",
+                            subtitle =
+                                "https://github.com/furenkun123/FuelTracker",
+                            icon = Icons.Default.Code,
+                            enabled = !isBackupOperationRunning,
+                            onClick = {
+                                val url =
+                                    "https://github.com/furenkun123/FuelTracker"
+
+                                try {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            url.toUri()
+                                        )
+                                    )
+                                } catch (_: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "无法打开链接",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        )
+
+                        HorizontalDivider(
+                            color =
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            thickness = 0.6.dp
+                        )
+
+                        // ==============================
+                        // 版本号
+                        // ==============================
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement =
+                                Arrangement.SpaceBetween,
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            Text(
+                                text = "版本号",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color =
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+
+                            Text(
+                                text =
+                                    "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color =
+                                    MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
             }
-
-            // ============ 关于 ============
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "关于",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-
-                    MiuiCardLocal {
-                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { isAboutExpanded = !isAboutExpanded }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Info,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "关于应用",
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "版本信息、使用说明、更新",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                Icon(
-                                    imageVector = if (isAboutExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = if (isAboutExpanded) "收起" else "展开",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            AnimatedVisibility(
-                                visible = isAboutExpanded,
-                                enter = expandVertically(
-                                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                                ) + fadeIn(
-                                    animationSpec = tween(300, delayMillis = 200)
-                                ),
-                                exit = shrinkVertically(
-                                    animationSpec = tween(300, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                                ) + fadeOut(animationSpec = tween(180))
-                            ) {
-                                Column {
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        thickness = 0.6.dp
-                                    )
-
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                                    ) {
-                                        // 应用说明(可展开)
-                                        Column {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { isInstructionsExpanded = !isInstructionsExpanded }
-                                                    .padding(vertical = 2.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = "应用说明",
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    Spacer(modifier = Modifier.height(2.dp))
-                                                    Text(
-                                                        text = "初次使用建议先阅读使用说明与功能指南",
-                                                        fontSize = 12.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                Icon(
-                                                    imageVector = if (isInstructionsExpanded)
-                                                        Icons.Default.KeyboardArrowUp
-                                                    else
-                                                        Icons.Default.KeyboardArrowDown,
-                                                    contentDescription = if (isInstructionsExpanded) "收起" else "展开",
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-
-                                            // 展开区域
-                                            AnimatedVisibility(
-                                                visible = isInstructionsExpanded,
-                                                enter = expandVertically(
-                                                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                                                ) + fadeIn(
-                                                    animationSpec = tween(300, delayMillis = 200)
-                                                ),
-                                                exit = shrinkVertically(
-                                                    animationSpec = tween(300, easing = CubicBezierEasing(
-                                                        0.4f,
-                                                        0f,
-                                                        0.2f,
-                                                        1f
-                                                    )
-                                                    )
-                                                ) + fadeOut(animationSpec = tween(180))
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(top = 10.dp, bottom = 4.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                                ) {
-                                                    MiuiInstructionItem(1, "应用完全离线使用，一定注意备份")
-                                                    MiuiInstructionItem(2, "完全依赖免费 AI 提供代码，所以直接 GitHub 开源。有兴趣的自己改，使用应该没明显 Bug")
-                                                    MiuiInstructionItem(3, "平均油耗使用多个逻辑算法，加满和漏记也参与计算")
-                                                    MiuiInstructionItem(4, "车型信息爬取筛选后还有 3000 多车系，可能有遗漏")
-                                                    MiuiInstructionItem(5, "支持多车辆切换")
-                                                }
-                                            }
-                                        }
-                                        HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                            thickness = 0.6.dp
-                                        )
-                                        AboutRow(
-                                            title = "查看更新",
-                                            subtitle = "跳转网盘查看与下载最新安装包",
-                                            icon = Icons.Default.CloudDownload,
-                                            onClick = {
-                                                val url = "https://yun.139.com/shareweb/#/w/i/2xTrJEeQhKJ01"
-                                                try {
-                                                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-                                                } catch (_: Exception) {
-                                                    Toast.makeText(context, "无法打开网盘链接", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        )
-                                        HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                            thickness = 0.6.dp
-                                        )
-                                        AboutRow(
-                                            title = "GitHub",
-                                            subtitle = "https://github.com/furenkun123/FuelTracker",
-                                            icon = Icons.Default.Code,
-                                            onClick = {
-                                                val url = "https://github.com/furenkun123/FuelTracker"
-                                                try {
-                                                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-                                                } catch (_: Exception) {
-                                                    Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        )
-
-                                        HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                            thickness = 0.6.dp
-                                        )
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "版本号",
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-        }
-    }
-    // ============ 展开自动滚到可见 ============
-    LaunchedEffect(isDataExpanded) {
-        if (isDataExpanded) {
-            delay(410.milliseconds)
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-            val viewportEnd = listState.layoutInfo.viewportEndOffset
-            val remaining = (last?.let { it.offset + it.size } ?: 0) - viewportEnd
-            if (remaining > 0) {
-                listState.animateScrollBy(
-                    value = remaining.toFloat(),
-                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                )
-            }
         }
     }
 
-    LaunchedEffect(isThemeExpanded) {
-        if (isThemeExpanded) {
-            delay(410.milliseconds)
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-            val viewportEnd = listState.layoutInfo.viewportEndOffset
-            val remaining = (last?.let { it.offset + it.size } ?: 0) - viewportEnd
-            if (remaining > 0) {
-                listState.animateScrollBy(
-                    value = remaining.toFloat(),
-                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                )
-            }
-        }
-    }
+    // 自动滚动处理
+    AutoScrollOnExpand(isDataExpanded, KeyDataSection, listState)
+    AutoScrollOnExpand(isThemeExpanded, KeyThemeSection, listState)
+    AutoScrollOnExpand(isAboutExpanded, KeyAboutSection, listState)
+    AutoScrollOnExpand(isAboutExpanded && isInstructionsExpanded, KeyAboutSection, listState)
 
-    LaunchedEffect(isAboutExpanded) {
-        if (isAboutExpanded) {
-            delay(410.milliseconds)
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-            val viewportEnd = listState.layoutInfo.viewportEndOffset
-            val remaining = (last?.let { it.offset + it.size } ?: 0) - viewportEnd
-            if (remaining > 0) {
-                listState.animateScrollBy(
-                    value = remaining.toFloat(),
-                    animationSpec = tween(400, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
-                )
-            }
-        }
-    }
-
-    // 删除车辆
-    vehicleToDelete?.let { vehicle ->
+    // 删除车辆确认弹窗
+    vehicles.firstOrNull { it.id == vehicleToDeleteId }?.let { vehicle ->
         MiuiConfirmDialog(
             title = "确认删除车辆？",
-            message = "删除“${vehicle.brand} ${vehicle.model}”将同步删除该车辆下的所有加油记录，且不可恢复。",
+            message = buildString {
+                append("删除“${vehicle.brand} ${vehicle.model}”将同步删除该车辆下的所有加油记录，且不可恢复。")
+                if (vehicle.isCurrent) {
+                    append("\n注意：这是当前正在使用的车辆。")
+                }
+            },
             confirmText = "删除",
             onConfirm = {
+                vehicleToDeleteId = null
                 onDeleteVehicle(vehicle)
-                vehicleToDelete = null
             },
-            onDismiss = { vehicleToDelete = null }
+            onDismiss = { vehicleToDeleteId = null }
         )
     }
 
-    // 恢复备份
+    // 恢复备份确认弹窗
     selectedRestoreUri?.let { uri ->
         MiuiConfirmDialog(
             title = "确认恢复备份？",
@@ -769,12 +667,19 @@ fun SettingsScreen(
             confirmText = "覆盖并恢复",
             onConfirm = {
                 selectedRestoreUri = null
-                coroutineScope.launch {
+                isBackupOperationRunning = true
+                coroutineScope.launch(Dispatchers.IO) {
                     try {
                         BackupManager.restoreFromUri(context, uri)
-                        Toast.makeText(context, "数据恢复成功！", Toast.LENGTH_SHORT).show()
+                        withContext(Dispatchers.Main) {
+                            isBackupOperationRunning = false
+                            Toast.makeText(context, "数据恢复成功！", Toast.LENGTH_SHORT).show()
+                        }
                     } catch (e: Exception) {
-                        Toast.makeText(context, "数据恢复失败: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                        withContext(Dispatchers.Main) {
+                            isBackupOperationRunning = false
+                            Toast.makeText(context, "数据恢复失败: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             },
@@ -784,8 +689,156 @@ fun SettingsScreen(
 }
 
 // ============================================================
+// 可展开设置卡片
+// ============================================================
+
+@Composable
+private fun ExpandableSettingCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    enabled: Boolean = true,
+    onExpandedChange: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    MiuiCardLocal {
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = enabled, onClick = onExpandedChange)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = title,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = subtitle,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "收起" else "展开",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = ExpandSpec + FadeInSpec,
+                exit = ShrinkSpec + FadeOutSpec
+            ) {
+                Column {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        thickness = 0.6.dp
+                    )
+                    content()
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// 自动滚动
+// ============================================================
+
+@Composable
+private fun AutoScrollOnExpand(
+    expanded: Boolean,
+    sectionKey: String,
+    listState: LazyListState
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    LaunchedEffect(expanded, sectionKey) {
+        if (!expanded) return@LaunchedEffect
+
+        delay(ScrollDelayMs.milliseconds)
+
+        val layoutInfo = listState.layoutInfo
+        val item = layoutInfo.visibleItemsInfo.firstOrNull { it.key == sectionKey } ?: return@LaunchedEffect
+
+        val overshoot = item.offset + item.size - layoutInfo.viewportEndOffset
+        if (overshoot <= 0) return@LaunchedEffect
+
+        val keepHeaderPx = with(density) { 48.dp.toPx() }
+        val maxScroll = (item.offset - layoutInfo.viewportStartOffset + keepHeaderPx).coerceAtLeast(0f)
+        val scrollBy = overshoot.toFloat().coerceIn(0f, maxScroll)
+
+        if (scrollBy > 0f) {
+            listState.animateScrollBy(
+                value = scrollBy,
+                animationSpec = tween(
+                    durationMillis = 350,
+                    easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
+                )
+            )
+        }
+    }
+}
+
+// ============================================================
+// JSON 文件判断
+// ============================================================
+
+private fun isJsonFile(context: Context, uri: Uri): Boolean {
+    val displayName = context.contentResolver.query(
+        uri,
+        arrayOf(OpenableColumns.DISPLAY_NAME),
+        null,
+        null,
+        null
+    )?.use { cursor ->
+        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (index >= 0 && cursor.moveToFirst()) {
+            cursor.getString(index)
+        } else {
+            null
+        }
+    }
+
+    return displayName == null || displayName.endsWith(".json", ignoreCase = true)
+}
+
+// ============================================================
 // MIUI 卡片
 // ============================================================
+
 @Composable
 private fun MiuiCardLocal(
     modifier: Modifier = Modifier,
@@ -803,6 +856,7 @@ private fun MiuiCardLocal(
 // ============================================================
 // 车辆卡片
 // ============================================================
+
 @Composable
 private fun VehicleItemCard(
     vehicle: Vehicle,
@@ -822,20 +876,22 @@ private fun VehicleItemCard(
                     .size(38.dp)
                     .clip(CircleShape)
                     .background(
-                        if (vehicle.isCurrent)
+                        if (vehicle.isCurrent) {
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        else
+                        } else {
                             MaterialTheme.colorScheme.surfaceVariant
+                        }
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.DirectionsCar,
                     contentDescription = null,
-                    tint = if (vehicle.isCurrent)
+                    tint = if (vehicle.isCurrent) {
                         MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -844,12 +900,16 @@ private fun VehicleItemCard(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "${vehicle.brand} ${vehicle.series} ${vehicle.model}".trim(),
+                    text = listOf(vehicle.brand, vehicle.series, vehicle.model)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" "),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+
                 Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
                     text = "${vehicle.year}款 | ${vehicle.fuelType} (${vehicle.fuelGrade}) | 油箱 ${vehicle.tankCapacity}L",
                     fontSize = 12.sp,
@@ -877,6 +937,7 @@ private fun VehicleItemCard(
                         )
                     }
                 }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -889,6 +950,7 @@ private fun VehicleItemCard(
                             modifier = Modifier.size(16.dp)
                         )
                     }
+
                     IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
@@ -906,17 +968,19 @@ private fun VehicleItemCard(
 // ============================================================
 // 设置操作行
 // ============================================================
+
 @Composable
 private fun SettingActionRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -939,7 +1003,9 @@ private fun SettingActionRow(
                     modifier = Modifier.size(20.dp)
                 )
             }
+
             Spacer(modifier = Modifier.width(12.dp))
+
             Column {
                 Text(
                     text = title,
@@ -955,6 +1021,7 @@ private fun SettingActionRow(
                 )
             }
         }
+
         Text(
             text = "›",
             fontSize = 22.sp,
@@ -965,19 +1032,42 @@ private fun SettingActionRow(
 }
 
 // ============================================================
-// "关于"里的一行
+// 处理中的提示
 // ============================================================
+
+@Composable
+private fun ProcessingRow() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "正在处理数据，请稍候…",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// ============================================================
+// About 行
+// ============================================================
+
 @Composable
 private fun AboutRow(
     title: String,
     subtitle: String,
     icon: ImageVector,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -996,6 +1086,7 @@ private fun AboutRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
         Icon(
             imageVector = icon,
             contentDescription = title,
@@ -1003,14 +1094,12 @@ private fun AboutRow(
             modifier = Modifier.size(18.dp)
         )
     }
-
 }
 
-
-
 // ============================================================
-// MIUI 说明条目
+// 使用说明
 // ============================================================
+
 @Composable
 private fun MiuiInstructionItem(
     index: Int,
@@ -1035,6 +1124,7 @@ private fun MiuiInstructionItem(
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
+
         Text(
             text = text,
             fontSize = 14.sp,
@@ -1048,6 +1138,7 @@ private fun MiuiInstructionItem(
 // ============================================================
 // MIUI 确认弹窗
 // ============================================================
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MiuiConfirmDialog(
@@ -1061,6 +1152,7 @@ private fun MiuiConfirmDialog(
 ) {
     val effectiveConfirmColor = confirmColor ?: MaterialTheme.colorScheme.error
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var actionTriggered by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1079,9 +1171,7 @@ private fun MiuiConfirmDialog(
                         .width(40.dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        )
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                 )
             }
         }
@@ -1092,7 +1182,6 @@ private fun MiuiConfirmDialog(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 28.dp)
         ) {
-            // 标题
             Text(
                 text = title,
                 fontSize = 18.sp,
@@ -1102,9 +1191,8 @@ private fun MiuiConfirmDialog(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 内容
             Text(
                 text = message,
                 fontSize = 14.sp,
@@ -1114,14 +1202,12 @@ private fun MiuiConfirmDialog(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // 底部按钮: 横向两个, 各占一半
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 取消
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier
@@ -1140,9 +1226,13 @@ private fun MiuiConfirmDialog(
                     )
                 }
 
-                // 确认
                 TextButton(
-                    onClick = onConfirm,
+                    onClick = {
+                        if (actionTriggered) return@TextButton
+                        actionTriggered = true
+                        onConfirm()
+                    },
+                    enabled = !actionTriggered,
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp),

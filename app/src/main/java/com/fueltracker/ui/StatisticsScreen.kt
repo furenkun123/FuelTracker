@@ -64,10 +64,21 @@ private enum class StatisticsFilter {
     CUSTOM_MONTH
 }
 
-// 语义色 (这些 Material 没有对应槽位, 深浅色下都清晰)
+// 语义色 (深浅色模式下均清晰)
 private val ConsumptionOrange = Color(0xFFFF6900)
 private val WarningOrange = Color(0xFFFF9800)
 private val SuccessGreen = Color(0xFF4CAF50)
+
+// 日期格式化工具复用，避免列表滑动时重复创建对象
+private val ITEM_DATE_FORMAT by lazy {
+    SimpleDateFormat("yy-MM-dd", Locale.getDefault())
+}
+private val MONTH_DESC_FORMAT by lazy {
+    SimpleDateFormat("yyyy年MM月", Locale.getDefault())
+}
+private val YEAR_DESC_FORMAT by lazy {
+    SimpleDateFormat("yyyy年", Locale.getDefault())
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,8 +89,8 @@ fun StatisticsScreen(
 ) {
     val now = remember { System.currentTimeMillis() }
     val currentCalendar = remember(now) { Calendar.getInstance().apply { timeInMillis = now } }
-    val currentYear = currentCalendar.get(Calendar.YEAR)
-    val currentMonth = currentCalendar.get(Calendar.MONTH) + 1
+    val currentYear = remember(currentCalendar) { currentCalendar.get(Calendar.YEAR) }
+    val currentMonth = remember(currentCalendar) { currentCalendar.get(Calendar.MONTH) + 1 }
 
     var selectedFilter by remember { mutableStateOf(StatisticsFilter.ALL) }
     var selectedYear by remember { mutableIntStateOf(currentYear) }
@@ -282,7 +293,6 @@ fun StatisticsScreen(
                             StatisticValue(title = "起止表显里程", value = summary.odometerSpanText)
                         }
 
-                        // 未闭合记录提示
                         if (summary.unclosedCount > 0) {
                             Text(
                                 text = "提示：含有 ${summary.unclosedCount} 次加油尚未填写后续里程，将在下次填写里程后自动推算平摊油耗。",
@@ -436,12 +446,11 @@ private fun StatisticsConsumptionItem(
     result: ConsumptionResult,
     records: List<FuelRecord>
 ) {
-    val dateFormat = remember { SimpleDateFormat("yy-MM-dd", Locale.getDefault()) }
     val record = remember(records, result.recordId) {
         records.firstOrNull { it.id == result.recordId }
     }
     val timeText = remember(record) {
-        record?.let { dateFormat.format(Date(it.timestamp)) } ?: "--"
+        record?.let { ITEM_DATE_FORMAT.format(Date(it.timestamp)) } ?: "--"
     }
 
     MiuixCard {
@@ -574,25 +583,40 @@ private fun <T> HyperWheelList(
         with(density) { itemHeight.toPx() }
     }
 
-    val initialIndex = remember(items) {
+    // 补全 key 依赖，确保 selectedValue 或 items 变化时重置索引
+    val initialIndex = remember(items, selectedValue) {
         items.indexOf(selectedValue).coerceAtLeast(0)
     }
 
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
 
-    val selectedIndex by remember {
+    // 计算当前选中索引，增加边界约束防止末尾越界
+    val selectedIndex by remember(items, itemHeightPx) {
         derivedStateOf {
-            val firstVisible = listState.firstVisibleItemIndex
-            val offset = listState.firstVisibleItemScrollOffset
-            if (offset > itemHeightPx / 2f) firstVisible + 1 else firstVisible
+            if (items.isEmpty()) 0
+            else {
+                val firstVisible = listState.firstVisibleItemIndex
+                val offset = listState.firstVisibleItemScrollOffset
+                val rawIndex = if (offset > itemHeightPx / 2f) firstVisible + 1 else firstVisible
+                rawIndex.coerceIn(items.indices)
+            }
         }
     }
 
+    // 当外部 selectedValue 改变时，同步滚动滚轮
+    LaunchedEffect(selectedValue, items) {
+        val targetIndex = items.indexOf(selectedValue).coerceAtLeast(0)
+        if (items.isNotEmpty() && targetIndex in items.indices && targetIndex != selectedIndex) {
+            listState.scrollToItem(targetIndex)
+        }
+    }
+
+    // 滚动停止后向外部回调选中值
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }
             .collect { isScrolling ->
-                if (!isScrolling) {
+                if (!isScrolling && items.isNotEmpty()) {
                     val targetIndex = selectedIndex.coerceIn(items.indices)
                     val currentItem = items[targetIndex]
                     if (currentItem != selectedValue) {
@@ -627,7 +651,7 @@ private fun <T> HyperWheelList(
         ) {
             items(
                 count = items.size,
-                key = { index -> items[index].hashCode() }
+                key = { index -> items[index] ?: index }
             ) { index ->
                 val isSelected = index == selectedIndex
                 val item = items[index]
@@ -658,7 +682,6 @@ private fun getStatisticsRange(
     customYear: Int,
     customMonth: Int
 ): Pair<Long, Long> {
-
     if (filter == StatisticsFilter.ALL) {
         return Long.MIN_VALUE to Long.MAX_VALUE
     }
@@ -697,7 +720,6 @@ private fun getStatisticsRange(
     }
 
     val end = endCalendar.timeInMillis - 1
-
     return start to end
 }
 
@@ -710,9 +732,9 @@ private fun getFilterDescription(
     return when (filter) {
         StatisticsFilter.ALL -> "显示全部历史记录"
         StatisticsFilter.MONTH ->
-            SimpleDateFormat("yyyy年MM月", Locale.getDefault()).format(Date(now)) + " · 显示本月记录"
+            MONTH_DESC_FORMAT.format(Date(now)) + " · 显示本月记录"
         StatisticsFilter.YEAR ->
-            SimpleDateFormat("yyyy年", Locale.getDefault()).format(Date(now)) + " · 显示今年记录"
+            YEAR_DESC_FORMAT.format(Date(now)) + " · 显示今年记录"
         StatisticsFilter.CUSTOM_MONTH ->
             "${customYear}年${customMonth}月 · 显示指定月份记录"
     }

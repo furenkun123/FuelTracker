@@ -13,8 +13,3 @@ data class CarBrand(
     val series: List<String> = emptyList() // ★ 新增：包含的车系列表
 )
 
-@Serializable
-data class Series(
-    @SerialName("name") val name: String,
-    @SerialName("category") val category: String? = null
-)

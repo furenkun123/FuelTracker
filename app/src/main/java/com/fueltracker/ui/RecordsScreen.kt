@@ -64,6 +64,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 
 private val RECORD_DATE_FORMAT by lazy {
     SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
@@ -424,6 +426,34 @@ private fun FilterCapsule(
     }
 }
 
+/**
+ * 紧凑文字按钮。
+ * Material3 的 TextButton 有 48dp 最小高度，
+ * 小卡片里会显得按钮悬在中间，这里明确控高到 26dp。
+ */
+@Composable
+private fun CompactTextButton(
+    text: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = color,
+            maxLines = 1
+        )
+    }
+}
+
 // =================================================
 // 加油记录卡片
 // =================================================
@@ -517,29 +547,17 @@ private fun FuelRecordCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    TextButton(
-                        onClick = onEdit,
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            text = "编辑",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    CompactTextButton(
+                        text = "编辑",
+                        color = MaterialTheme.colorScheme.primary,
+                        onClick = onEdit
+                    )
 
-                    TextButton(
-                        onClick = { showDeleteDialog = true },
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            text = "删除",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFFFF3B30).copy(alpha = 0.8f)
-                        )
-                    }
+                    CompactTextButton(
+                        text = "删除",
+                        color = Color(0xFFFF3B30).copy(alpha = 0.8f),
+                        onClick = { showDeleteDialog = true }
+                    )
                 }
             }
 

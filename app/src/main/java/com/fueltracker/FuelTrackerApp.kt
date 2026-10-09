@@ -42,10 +42,52 @@ fun FuelTrackerApp(
         mutableStateOf<Vehicle?>(null)
     }
 
+    // ADD_VEHICLE 有两个入口（首页 / 设置页），
+    // 按返回时回到进入前的位置，而不是一律回首页。
+    var addVehicleOrigin by remember {
+        mutableStateOf(AppScreen.HOME)
+    }
+
+    // 按返回键时的"上一级"映射。
+    // 只有当前不在首页时才拦截。
     BackHandler(enabled = screen != AppScreen.HOME) {
-        editingRecord = null
-        editingVehicle = null
-        screen = AppScreen.HOME
+        when (screen) {
+            AppScreen.RECORDS,
+            AppScreen.STATISTICS -> {
+                screen = AppScreen.HOME
+            }
+
+            AppScreen.ADD_VEHICLE -> {
+                screen = addVehicleOrigin
+            }
+
+            AppScreen.INITIAL_RECORD -> {
+                // 车辆已保存，返回不再回 ADD_VEHICLE（避免重复保存）
+                screen = AppScreen.HOME
+            }
+
+            AppScreen.ADD_FUEL -> {
+                screen = AppScreen.HOME
+            }
+
+            AppScreen.EDIT_FUEL -> {
+                editingRecord = null
+                screen = AppScreen.RECORDS
+            }
+
+            AppScreen.EDIT_VEHICLE -> {
+                editingVehicle = null
+                screen = AppScreen.SETTINGS
+            }
+
+            AppScreen.SETTINGS -> {
+                screen = AppScreen.HOME
+            }
+
+            AppScreen.HOME -> {
+                // 不会到这里（enabled 条件已排除），写出来是为了穷举
+            }
+        }
     }
 
     val showBottomBar = screen == AppScreen.HOME
@@ -90,7 +132,10 @@ fun FuelTrackerApp(
                             records = records,
                             latestConsumption = latest,
                             averageConsumption = average,
-                            onAddVehicle = { screen = AppScreen.ADD_VEHICLE },
+                            onAddVehicle = {
+                                addVehicleOrigin = AppScreen.HOME
+                                screen = AppScreen.ADD_VEHICLE
+                            },
                             onAddFuel = { screen = AppScreen.ADD_FUEL },
                             onOpenSettings = { screen = AppScreen.SETTINGS },
                             onViewStatistics = { screen = AppScreen.STATISTICS }
@@ -109,7 +154,6 @@ fun FuelTrackerApp(
                     }
 
                     AppScreen.STATISTICS -> {
-                        // 修正：补充获取 currentVehicle 并在下面传入 StatisticsScreen
                         val vehicle by viewModel.currentVehicle.collectAsState()
                         val records by viewModel.records.collectAsState()
 
@@ -132,7 +176,7 @@ fun FuelTrackerApp(
                 VehicleScreen(
                     viewModel = viewModel,
                     vehicle = null,
-                    onBack = { screen = AppScreen.HOME },
+                    onBack = { screen = addVehicleOrigin },
                     onSaved = { screen = AppScreen.INITIAL_RECORD }
                 )
             }
@@ -145,7 +189,6 @@ fun FuelTrackerApp(
                 )
             }
 
-            // 新增加油记录
             AppScreen.ADD_FUEL -> {
                 FuelScreen(
                     viewModel = viewModel,
@@ -155,7 +198,6 @@ fun FuelTrackerApp(
                 )
             }
 
-            // 编辑加油记录
             AppScreen.EDIT_FUEL -> {
                 val record = editingRecord
 
@@ -209,7 +251,10 @@ fun FuelTrackerApp(
                     onDeleteVehicle = { vehicle ->
                         viewModel.deleteVehicle(vehicle)
                     },
-                    onAddVehicle = { screen = AppScreen.ADD_VEHICLE },
+                    onAddVehicle = {
+                        addVehicleOrigin = AppScreen.SETTINGS
+                        screen = AppScreen.ADD_VEHICLE
+                    },
                     onEditVehicle = { vehicle ->
                         editingVehicle = vehicle
                         screen = AppScreen.EDIT_VEHICLE
@@ -224,7 +269,6 @@ fun FuelTrackerApp(
         }
     }
 }
-
 enum class AppScreen {
     HOME,
     ADD_VEHICLE,

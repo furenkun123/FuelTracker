@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlin.coroutines.cancellation.CancellationException
 
 class CarDatabase private constructor(private val appContext: Context) {
 
@@ -42,6 +43,8 @@ class CarDatabase private constructor(private val appContext: Context) {
                     "catalog 解析: 品牌 ${c.tree.size}, 车系 ${c.tree.values.sumOf { it.size }}")
                 catalogCache = c
                 c
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 Log.e("CarDatabase", "解析 $ASSET 失败: ${e.message}", e)
                 null
@@ -49,12 +52,7 @@ class CarDatabase private constructor(private val appContext: Context) {
         }
     }
 
-    /** 同步判断是否就绪 */
-    fun isCatalogReady(): Boolean = catalogCache != null
-
     // ---------- 4 级同步查询（必须先 ensureCatalogLoaded）----------
-
-    fun letters(): List<String> = catalogCache?.letters ?: emptyList()
 
     fun brandsByLetter(): Map<String, List<String>> =
         catalogCache?.brandsByLetter ?: emptyMap()
@@ -68,6 +66,4 @@ class CarDatabase private constructor(private val appContext: Context) {
     fun trims(brand: String, series: String, year: String): List<Trim> =
         catalogCache?.tree?.get(brand)?.get(series)?.trims?.get(year) ?: emptyList()
 
-    fun seriesId(brand: String, series: String): String =
-        catalogCache?.tree?.get(brand)?.get(series)?.seriesId ?: ""
 }

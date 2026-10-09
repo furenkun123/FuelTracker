@@ -15,7 +15,6 @@ data class CarCatalog(
 
 @Serializable
 data class SeriesNode(
-    @SerialName("series_id") val seriesId: String = "",
     val years: List<String> = emptyList(),
     val trims: Map<String, List<Trim>> = emptyMap()
 )

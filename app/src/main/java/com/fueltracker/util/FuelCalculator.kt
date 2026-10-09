@@ -84,6 +84,17 @@ data class StatisticsSummary(
 
     val rangeResults: List<ConsumptionResult>,
 
+    /**
+     * 范围内未形成油耗结果的记录（按时间倒序）。
+     * 包括：无里程、未满箱闭合、被硬边界拒绝等。
+     */
+    val pendingRecords: List<FuelRecord> = emptyList(),
+
+    /**
+     * odometer 为空的记录数（"完全没填里程"的次数）。
+     */
+    val missingOdometerCount: Int = 0,
+
     /** 鲁棒加权中位数 (权重：confidenceScore × sqrt(distance)) */
     val robustAverageConsumption: Double? = null,
 
@@ -388,6 +399,15 @@ object FuelCalculator {
             .toList()
 
         val rangeResults = periodRecords.mapNotNull { resultsById[it.id] }
+
+        // 未形成油耗结果的记录（无里程 / 未满箱闭合 / 被硬边界拒绝等）
+        val pendingRecords = periodRecords
+            .filter { resultsById[it.id] == null }
+            .sortedByDescending { it.timestamp }
+
+        // 完全没填里程的记录数
+        val missingOdometerCount = periodRecords.count { it.odometer == null }
+
         val totalCount = periodRecords.size
         val totalVolume = periodRecords.sumOf { safeFuelVolume(it) }
         val totalMissedVolume = periodRecords.sumOf { safeMissedVolume(it) }
@@ -443,6 +463,8 @@ object FuelCalculator {
             odometerSpanText = odometerSpanText,
             unclosedCount = unclosedCount,
             rangeResults = rangeResults,
+            pendingRecords = pendingRecords,
+            missingOdometerCount = missingOdometerCount,
             robustAverageConsumption = robust,
             weightedAverageConsumption = weightedMean,
             reliableResultCount = reliableResults.size,

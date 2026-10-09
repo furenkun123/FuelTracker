@@ -63,6 +63,24 @@ private enum class StatisticsFilter {
     YEAR,
     CUSTOM_MONTH
 }
+/**
+ * 统计明细列表的显示项。
+ * 有油耗结果的和没结果的混在一起按时间倒序展示。
+ */
+private sealed class StatisticsDisplayItem {
+    abstract val timestamp: Long
+
+    data class WithResult(
+        val result: ConsumptionResult,
+        override val timestamp: Long
+    ) : StatisticsDisplayItem()
+
+    data class Pending(
+        val record: FuelRecord
+    ) : StatisticsDisplayItem() {
+        override val timestamp: Long get() = record.timestamp
+    }
+}
 
 // 语义色 (深浅色模式下均清晰)
 private val ConsumptionOrange = Color(0xFFFF6900)
@@ -120,6 +138,29 @@ fun StatisticsScreen(
             startTime = range.first,
             endTime = range.second
         )
+    }
+
+    // recordId → FuelRecord 映射，供明细列表复用
+    val recordMap = remember(records) { records.associateBy { it.id } }
+
+    // 合并"有结果的记录"和"无结果的记录"，统一按时间倒序
+    val displayItems = remember(summary, recordMap) {
+        val list = mutableListOf<StatisticsDisplayItem>()
+
+        summary.rangeResults.forEach { result ->
+            val timestamp = recordMap[result.recordId]?.timestamp ?: 0L
+            list += StatisticsDisplayItem.WithResult(
+                result = result,
+                timestamp = timestamp
+            )
+        }
+
+        summary.pendingRecords.forEach { record ->
+            list += StatisticsDisplayItem.Pending(record = record)
+        }
+
+        list.sortByDescending { it.timestamp }
+        list
     }
 
     Scaffold(
@@ -293,9 +334,17 @@ fun StatisticsScreen(
                             StatisticValue(title = "起止表显里程", value = summary.odometerSpanText)
                         }
 
-                        if (summary.unclosedCount > 0) {
+                        if (summary.unclosedCount > 0 || summary.missingOdometerCount > 0) {
+                            val parts = buildList {
+                                if (summary.missingOdometerCount > 0) {
+                                    add("${summary.missingOdometerCount} 次未填里程")
+                                }
+                                if (summary.unclosedCount > 0) {
+                                    add("${summary.unclosedCount} 次已填里程但未闭合")
+                                }
+                            }
                             Text(
-                                text = "提示：含有 ${summary.unclosedCount} 次加油尚未填写后续里程，将在下次填写里程后自动推算平摊油耗。",
+                                text = "提示：${parts.joinToString("，")}，未填里程的记录油量会在下次填写里程时平摊推算。",
                                 fontSize = 12.sp,
                                 color = WarningOrange
                             )
@@ -344,7 +393,7 @@ fun StatisticsScreen(
                 )
             }
 
-            if (summary.rangeResults.isEmpty()) {
+            if (displayItems.isEmpty()) {
                 item {
                     MiuixCard {
                         Column(
@@ -352,17 +401,17 @@ fun StatisticsScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "暂无可计算的油耗",
+                                text = "暂无记录",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = when (selectedFilter) {
-                                    StatisticsFilter.ALL -> "在后续加油记录中填写一次里程后，系统会自动以起点里程平摊推算油耗。"
-                                    StatisticsFilter.MONTH -> "本月暂时没有已闭合的里程及油耗数据。"
-                                    StatisticsFilter.YEAR -> "今年暂时没有已闭合的里程及油耗数据。"
-                                    StatisticsFilter.CUSTOM_MONTH -> "${selectedYear}年${selectedMonth}月暂无可计算的油耗数据。"
+                                    StatisticsFilter.ALL -> "还没有任何加油记录。"
+                                    StatisticsFilter.MONTH -> "本月暂时没有加油记录。"
+                                    StatisticsFilter.YEAR -> "今年暂时没有加油记录。"
+                                    StatisticsFilter.CUSTOM_MONTH -> "${selectedYear}年${selectedMonth}月暂无加油记录。"
                                 },
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -372,13 +421,25 @@ fun StatisticsScreen(
                 }
             } else {
                 items(
-                    items = summary.rangeResults.asReversed(),
-                    key = { it.recordId }
-                ) { result ->
-                    StatisticsConsumptionItem(
-                        result = result,
-                        records = records
-                    )
+                    items = displayItems,
+                    key = { item ->
+                        when (item) {
+                            is StatisticsDisplayItem.WithResult -> "r:${item.result.recordId}"
+                            is StatisticsDisplayItem.Pending -> "p:${item.record.id}"
+                        }
+                    }
+                ) { item ->
+                    when (item) {
+                        is StatisticsDisplayItem.WithResult -> {
+                            StatisticsConsumptionItem(
+                                result = item.result,
+                                timestamp = item.timestamp
+                            )
+                        }
+                        is StatisticsDisplayItem.Pending -> {
+                            StatisticsPendingItem(record = item.record)
+                        }
+                    }
                 }
             }
 
@@ -444,13 +505,10 @@ private fun StatisticValue(
 @Composable
 private fun StatisticsConsumptionItem(
     result: ConsumptionResult,
-    records: List<FuelRecord>
+    timestamp: Long
 ) {
-    val record = remember(records, result.recordId) {
-        records.firstOrNull { it.id == result.recordId }
-    }
-    val timeText = remember(record) {
-        record?.let { ITEM_DATE_FORMAT.format(Date(it.timestamp)) } ?: "--"
+    val timeText = remember(timestamp) {
+        ITEM_DATE_FORMAT.format(Date(timestamp))
     }
 
     MiuixCard {
@@ -498,6 +556,68 @@ private fun StatisticsConsumptionItem(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (result.isEstimated) WarningOrange else SuccessGreen
+            )
+        }
+    }
+}
+@Composable
+private fun StatisticsPendingItem(
+    record: FuelRecord
+) {
+    val timeText = remember(record.timestamp) {
+        ITEM_DATE_FORMAT.format(Date(record.timestamp))
+    }
+
+    MiuixCard {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = timeText,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "未记录里程",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = WarningOrange
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "加油 %.2f L".format(record.volume),
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "¥%.2f".format(record.actualPaidAmount),
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Text(
+                text = buildString {
+                    if (record.hasMissedRecord) {
+                        val missedVolume = record.missedVolume ?: 0.0
+                        append("含漏记 %.2f L · ".format(missedVolume))
+                    }
+                    append(if (record.isFull) "已加满" else "未加满")
+                },
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

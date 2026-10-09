@@ -1,5 +1,6 @@
 [versions]
 agp = "9.4.1"
+coilCompose = "2.7.0"
 coreKtx = "1.19.0"
 kotlinxSerializationJson = "1.11.0"
 lifecycleRuntimeKtx = "2.11.0"
@@ -10,7 +11,6 @@ room = "2.8.5"
 ksp = "2.3.6"
 material3 = "1.4.0"
 uiTest = "1.12.1"
-
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -31,6 +31,7 @@ androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 
 # Ktor
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coilCompose" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 androidx-compose-ui-test = { group = "androidx.compose.ui", name = "ui-test", version.ref = "uiTest" }

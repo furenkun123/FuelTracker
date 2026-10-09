@@ -1,5 +1,6 @@
 package com.fueltracker.ui
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -47,7 +49,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -55,8 +59,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fueltracker.data.CarBrand
 import com.fueltracker.data.CarDatabase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+
+/**
+ * 字母分组排序键：
+ * A-Z 按字母顺序排，'#' 放最后。
+ */
+private fun letterSortKey(letter: String): Int {
+    return when (letter) {
+        "#" -> 26
+        else -> letter.firstOrNull()
+            ?.uppercaseChar()
+            ?.let { it - 'A' }
+            ?.coerceIn(0, 25)
+            ?: 26
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrandSelectorScreen(
@@ -75,14 +95,23 @@ fun BrandSelectorScreen(
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
-        carDatabase.ensureCatalogLoaded()
-        val list = carDatabase.brandsByLetter().flatMap { (l, brands) ->
-            brands.map { CarBrand(it, l) }
+        isLoading = true
+        try {
+            carDatabase.ensureCatalogLoaded()
+            allBrands = carDatabase.brandsByLetter().flatMap { (letter, brands) ->
+                brands.map { brand -> CarBrand(brand, letter) }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("BrandSelectorScreen", "加载汽车品牌失败", e)
+            allBrands = emptyList()
+        } finally {
+            isLoading = false
         }
-        allBrands = list
-        isLoading = false
     }
 
     val filteredBrands = remember(searchText, allBrands) {
@@ -94,12 +123,13 @@ fun BrandSelectorScreen(
                         it.letter.contains(searchText, ignoreCase = true)
             }
         }
-        list.groupBy { it.letter.uppercase() }.toSortedMap()
+        list.groupBy { it.letter.uppercase() }
+            .toSortedMap(compareBy(::letterSortKey))
     }
 
     val letters = remember(filteredBrands) { filteredBrands.keys.toList() }
 
-    // ★ 顶部有一个手动输入 item, 所以初始索引从 1 开始
+    // 顶部包含 1 个手动输入 header item，初始索引从 1 开始计算
     val letterIndexMap = remember(filteredBrands) {
         val map = mutableMapOf<String, Int>()
         var currentIndex = 1
@@ -156,7 +186,6 @@ fun BrandSelectorScreen(
                     MuiXSearchBox(
                         value = searchText,
                         onValueChange = { searchText = it },
-                        placeholder = "搜索汽车品牌..."
                     )
 
                     if (filteredBrands.isEmpty()) {
@@ -179,7 +208,10 @@ fun BrandSelectorScreen(
 
                                 if (searchText.isNotBlank()) {
                                     Button(
-                                        onClick = { onManualInput(searchText.trim()) },
+                                        onClick = {
+                                            onManualInput(searchText.trim())
+                                            keyboard?.hide()
+                                        },
                                         shape = RoundedCornerShape(20.dp),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = MaterialTheme.colorScheme.primary
@@ -223,7 +255,17 @@ fun BrandSelectorScreen(
                                                 fontSize = 14.sp,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             ),
+                                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                             singleLine = true,
+                                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                            keyboardActions = KeyboardActions(
+                                                onDone = {
+                                                    if (customBrandInput.isNotBlank()) {
+                                                        onManualInput(customBrandInput.trim())
+                                                        keyboard?.hide()
+                                                    }
+                                                }
+                                            ),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(38.dp)
@@ -248,6 +290,7 @@ fun BrandSelectorScreen(
                                             onClick = {
                                                 if (customBrandInput.isNotBlank()) {
                                                     onManualInput(customBrandInput.trim())
+                                                    keyboard?.hide()
                                                 }
                                             },
                                             enabled = customBrandInput.isNotBlank(),
@@ -283,7 +326,7 @@ fun BrandSelectorScreen(
 
                                 items(
                                     items = brands,
-                                    key = { it.brand }
+                                    key = { "${it.letter}_${it.brand}" }
                                 ) { brand ->
                                     Column(
                                         modifier = Modifier
@@ -363,8 +406,10 @@ fun BrandSelectorScreen(
 private fun MuiXSearchBox(
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String
+    placeholder: String = "搜索汽车品牌..."
 ) {
+    val keyboard = LocalSoftwareKeyboardController.current
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -395,8 +440,12 @@ private fun MuiXSearchBox(
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = { keyboard?.hide() }
+                ),
                 modifier = Modifier.weight(1f),
                 decorationBox = { innerTextField ->
                     Box(contentAlignment = Alignment.CenterStart) {

@@ -514,8 +514,9 @@ fun SettingsScreen(
                                     MiuiInstructionItem(1, "应用完全离线，一定注意备份")
                                     MiuiInstructionItem(2, "完全依赖免费AI提供代码，所以开源。有兴趣的自己改，没发现明显Bug")
                                     MiuiInstructionItem(3, "平均油耗使用多个逻辑相互计算减小误差，以“满箱到满箱”为基本计算单元")
-                                    MiuiInstructionItem(4, "车型筛选08款起还剩3000多个，应该比较全")
+                                    MiuiInstructionItem(4, "车型列表从2008款起，应该比较全")
                                     MiuiInstructionItem(5, "支持多车辆切换，暗色主题")
+                                    MiuiInstructionItem(6, "代码在不断找ai优化，不定时会更新")
                                 }
                             }
                         }

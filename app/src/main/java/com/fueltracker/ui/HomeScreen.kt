@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -43,12 +44,17 @@ import com.fueltracker.ui.miui.MiuiLinkButton
 import com.fueltracker.ui.miui.MiuiTextIconButton
 import com.fueltracker.ui.miui.MiuiTopBar
 import com.fueltracker.ui.miui.VehicleCard
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
-import kotlinx.coroutines.flow.first
 
+
+private data class CostPoint(
+    val timestamp: Long,
+    val value: Double
+)
 private val homeRecordDateFormat by lazy {
     SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
 }
@@ -64,7 +70,8 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onViewStatistics: () -> Unit
 ) {
-    // 真正使用到的只有 deliveryDate，避免整个 vehicle 对象变化时重新计算
+
+    // 只依赖 deliveryDate，避免整个 vehicle 对象变化时重算
     val deliveryDate = vehicle?.deliveryDate
 
     // 统一按时间倒序，并过滤交付日期之前的记录
@@ -92,12 +99,28 @@ fun HomeScreen(
         fuelRecords.asReversed()
     }
 
-    // 费用趋势数据
+    // 费用趋势数据：
+    // - 过滤 null
+    // - 过滤负数（脏数据），防止图表出现异常高度
     val costData = remember(chronologicalRecords) {
-        chronologicalRecords.map { it.actualPaidAmount }
+        chronologicalRecords
+            .map { record ->
+                CostPoint(
+                    timestamp = record.timestamp,
+                    value = record.actualPaidAmount
+                )
+            }
+            .filter { it.value >= 0.0 }
     }
 
     val canShowCost = costData.size >= 2
+    // 解析"当前油耗"：
+    // 优先使用上层传入的值，其次取最近一条带油耗的加油记录。
+    // 提前到顶层计算并缓存，避免在 item 内部每次重组都扫一遍列表。
+    val resolvedLatestConsumption = remember(latestConsumption, fuelRecords) {
+        latestConsumption
+            ?: fuelRecords.firstOrNull { it.consumption != null }?.consumption
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -124,13 +147,12 @@ fun HomeScreen(
                     }
                 } else {
                     item {
-                        VehicleCard(vehicle = vehicle)
+                        VehicleCard(
+                            vehicle = vehicle,
+                        )
                     }
 
                     item {
-                        val resolvedLatestConsumption = latestConsumption
-                            ?: fuelRecords.firstOrNull { it.consumption != null }?.consumption
-
                         ConsumptionCard(
                             recordCount = fuelRecords.size,
                             latestConsumption = resolvedLatestConsumption,
@@ -141,9 +163,7 @@ fun HomeScreen(
                     if (canShowCost) {
                         item {
                             ChartCard(
-                                title = "费用趋势",
-                                unit = "元",
-                                values = costData
+                                points = costData
                             )
                         }
                     }
@@ -329,16 +349,29 @@ private fun MiuiStatisticItem(
 // 费用趋势柱状图
 // =================================================
 
+private val chartTimeFormatSameYear by lazy {
+    SimpleDateFormat("M月", Locale.getDefault())
+}
+
+private val chartTimeFormatCrossYear by lazy {
+    SimpleDateFormat("yy/MM", Locale.getDefault())
+}
+
+private val chartYearFormat by lazy {
+    SimpleDateFormat("yyyy", Locale.getDefault())
+}
+
 @Composable
 private fun ChartCard(
-    title: String,
-    unit: String,
-    values: List<Double>
+    points: List<CostPoint>,
+    title: String = "费用趋势",
+    unit: String = "元"
 ) {
-    if (values.isEmpty()) return
+    if (points.isEmpty()) return
+
+    val values = remember(points) { points.map { it.value } }
 
     val maxValue = values.maxOrNull() ?: return
-    val minValue = values.minOrNull() ?: return
 
     val yMax = if (maxValue > 0) maxValue * 1.15 else 1.0
 
@@ -347,8 +380,9 @@ private fun ChartCard(
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
 
-    val baseLabelStyle = remember(onSurfaceVariantColor) {
+    val baseValueLabelStyle = remember(onSurfaceVariantColor) {
         TextStyle(
             color = onSurfaceVariantColor,
             fontSize = 8.5.sp,
@@ -356,30 +390,78 @@ private fun ChartCard(
         )
     }
 
-    // 缓存文字测量结果，避免 Canvas 重绘时重复 measure
-    val labelLayouts = remember(values, maxValue, minValue, onSurfaceColor, onSurfaceVariantColor) {
-        values.map { value ->
-            val isMax = value == maxValue
-            val isMin = value == minValue
-            val currentStyle = if (isMax || isMin) {
-                baseLabelStyle.copy(color = onSurfaceColor, fontWeight = FontWeight.Bold)
-            } else {
-                baseLabelStyle
-            }
+    val baseTimeLabelStyle = remember(onSurfaceVariantColor) {
+        TextStyle(
+            color = onSurfaceVariantColor,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Normal
+        )
+    }
 
+
+    // 数值标签：每根柱子都标
+    val valueLabelLayouts = remember(
+        values,
+        baseValueLabelStyle,
+        textMeasurer
+    ) {
+        values.map { value ->
             textMeasurer.measure(
-                text = "%.1f".format(value),
-                style = currentStyle
+                text = "%.0f".format(value),
+                style = baseValueLabelStyle.copy(
+                    color = onSurfaceColor,
+                    fontWeight = FontWeight.Bold
+                )
             )
         }
     }
 
-    val scrollState = rememberScrollState()
-    val visibleCount = 12
+    // X 轴时间标签：同年只显示月份，跨年显示"年/月"
+    val isSameYear = remember(points) {
+        points
+            .map { chartYearFormat.format(Date(it.timestamp)) }
+            .distinct()
+            .size <= 1
+    }
 
-    // 仅在数据数量变化时自动滚动到最右侧
-    LaunchedEffect(values.size) {
-        if (values.size > visibleCount) {
+    val timeLabelLayouts = remember(
+        points,
+        isSameYear,
+        baseTimeLabelStyle,
+        textMeasurer
+    ) {
+        val format = if (isSameYear) {
+            chartTimeFormatSameYear
+        } else {
+            chartTimeFormatCrossYear
+        }
+
+        points.map { point ->
+            textMeasurer.measure(
+                text = format.format(Date(point.timestamp)),
+                style = baseTimeLabelStyle
+            )
+        }
+    }
+
+    // 动态顶部留白，兼容系统字体放大
+    val topPaddingDp = remember(valueLabelLayouts, density) {
+        val maxLabelHeightPx = valueLabelLayouts.maxOfOrNull { it.size.height } ?: 0
+        with(density) {
+            (maxLabelHeightPx.toDp() + 4.dp).coerceAtLeast(16.dp)
+        }
+    }
+
+    // 三段式高度：顶部留白 + 柱子绘制区 + X 轴时间轴
+    val chartAreaHeight = 94.dp
+    val timeAxisHeight = 18.dp
+    val canvasHeight = topPaddingDp + chartAreaHeight + timeAxisHeight
+
+    val scrollState = rememberScrollState()
+    val visibleCount = 10
+
+    LaunchedEffect(points.size) {
+        if (points.size > visibleCount) {
             val maxScroll = snapshotFlow { scrollState.maxValue }.first { it > 0 }
             scrollState.scrollTo(maxScroll)
         }
@@ -417,7 +499,11 @@ private fun ChartCard(
 
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val itemWidth = maxWidth / visibleCount
-                val chartWidth = if (values.size <= visibleCount) maxWidth else itemWidth * values.size
+                val chartWidth = if (points.size <= visibleCount) {
+                    maxWidth
+                } else {
+                    itemWidth * points.size
+                }
 
                 Box(
                     modifier = Modifier
@@ -427,51 +513,80 @@ private fun ChartCard(
                     Canvas(
                         modifier = Modifier
                             .width(chartWidth)
-                            .height(110.dp)
+                            .height(canvasHeight)
                     ) {
                         val width = size.width
-                        val topPadding = 16.dp.toPx()
-                        val chartHeight = size.height - topPadding
+                        val topPadding = topPaddingDp.toPx()
+                        val timeAxis = timeAxisHeight.toPx()
+                        val chartHeight =
+                            size.height - topPadding - timeAxis
                         val count = values.size
                         val slotWidth = width / count
 
-                        val barWidth = (slotWidth * 0.45f).coerceIn(4.dp.toPx(), 14.dp.toPx())
+                        // 柱子上限放宽到 60dp，数据少时撑起来
+                        val barWidth = (slotWidth * 0.55f)
+                            .coerceIn(4.dp.toPx(), 60.dp.toPx())
+
+                        // 0 值柱子保留 2dp 高度
+                        val minBarHeight = 2.dp.toPx()
+
+                        val timeLabelY = topPadding + chartHeight + 4.dp.toPx()
 
                         values.forEachIndexed { index, value ->
                             val slotLeft = index * slotWidth
                             val barCenterX = slotLeft + slotWidth / 2f
                             val barLeft = barCenterX - barWidth / 2f
 
-                            val heightFactor = (value / yMax).toFloat().coerceIn(0f, 1f)
-                            val barHeight = chartHeight * heightFactor
+                            val heightFactor =
+                                (value / yMax).toFloat().coerceIn(0f, 1f)
+                            val barHeight = (chartHeight * heightFactor)
+                                .coerceAtLeast(minBarHeight)
                             val barTop = topPadding + (chartHeight - barHeight)
 
                             val isMax = value == maxValue
-                            val isMin = value == minValue
 
-                            val barColor = when {
-                                isMax -> primaryColor
-                                isMin -> primaryColor.copy(alpha = 0.85f)
-                                else -> primaryColor.copy(alpha = 0.65f)
+                            val barColor = if (isMax) {
+                                primaryColor
+                            } else {
+                                primaryColor.copy(alpha = 0.65f)
                             }
 
                             drawRoundRect(
                                 color = barColor,
                                 topLeft = Offset(barLeft, barTop),
                                 size = Size(barWidth, barHeight),
-                                cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+                                cornerRadius = CornerRadius(
+                                    3.dp.toPx(),
+                                    3.dp.toPx()
+                                )
                             )
 
-                            val textLayoutResult = labelLayouts[index]
-                            val tWidth = textLayoutResult.size.width.toFloat()
-                            val tHeight = textLayoutResult.size.height.toFloat()
+                            // 每根柱子上方标数值
+                            val valueLayout = valueLabelLayouts[index]
+                            val vWidth = valueLayout.size.width.toFloat()
+                            val vHeight = valueLayout.size.height.toFloat()
 
-                            val textX = (barCenterX - tWidth / 2f).coerceIn(0f, width - tWidth)
-                            val textY = barTop - tHeight - 2.dp.toPx()
+                            val vMaxX = (width - vWidth).coerceAtLeast(0f)
+                            val valueX = (barCenterX - vWidth / 2f)
+                                .coerceIn(0f, vMaxX)
+                            val valueY = barTop - vHeight - 2.dp.toPx()
 
                             drawText(
-                                textLayoutResult = textLayoutResult,
-                                topLeft = Offset(textX, textY)
+                                textLayoutResult = valueLayout,
+                                topLeft = Offset(valueX, valueY)
+                            )
+
+                            // 柱子下方标时间
+                            val timeLayout = timeLabelLayouts[index]
+                            val tWidth = timeLayout.size.width.toFloat()
+
+                            val tMaxX = (width - tWidth).coerceAtLeast(0f)
+                            val timeX = (barCenterX - tWidth / 2f)
+                                .coerceIn(0f, tMaxX)
+
+                            drawText(
+                                textLayoutResult = timeLayout,
+                                topLeft = Offset(timeX, timeLabelY)
                             )
                         }
                     }
@@ -494,6 +609,7 @@ private fun HomeFuelRecordItem(
     }
 
     val singleConsumption = record.consumption
+    // 金额 / 单价为 null 时退回 0，避免 format 输出 "null"
     val paidAmount = record.actualPaidAmount
     val volume = record.volume
     val unitPrice = record.unitPrice

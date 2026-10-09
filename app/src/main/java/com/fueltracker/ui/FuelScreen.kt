@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -58,6 +60,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -73,6 +76,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.fueltracker.data.FuelRecord
 import com.fueltracker.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -89,6 +93,7 @@ fun FuelScreen(
     val isEditMode = record != null
     val vehicle by viewModel.currentVehicle.collectAsState()
     val tankCapacity = vehicle?.tankCapacity ?: 0.0
+    val scope = rememberCoroutineScope()
 
     // 格式化日期 Formatter 缓存，避免反复重组重复创建
     val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
@@ -97,7 +102,8 @@ fun FuelScreen(
         val rawGrade = record?.fuelGrade?.takeIf { it.isNotBlank() }
             ?: vehicle?.fuelGrade?.takeIf { it.isNotBlank() }
             ?: "92#"
-        if (rawGrade.endsWith("#") || rawGrade.contains("柴油")) rawGrade else "${rawGrade}#"
+        val trimmed = rawGrade.trim()
+        if (trimmed.endsWith("#") || trimmed.contains("柴油")) trimmed else "${trimmed}#"
     }
 
     val fuelGradeOptions = remember(defaultFuelGrade) {
@@ -111,8 +117,9 @@ fun FuelScreen(
     var fuelGrade by remember(defaultFuelGrade) { mutableStateOf(defaultFuelGrade) }
     var showFuelGradePicker by remember { mutableStateOf(false) }
 
+    // 修复：防止编辑模式传入非法时间戳
     var timestamp by remember(record) {
-        mutableLongStateOf(record?.timestamp ?: System.currentTimeMillis())
+        mutableLongStateOf(record?.timestamp?.takeIf { it > 0 } ?: System.currentTimeMillis())
     }
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -129,14 +136,18 @@ fun FuelScreen(
     var missedVolume by remember(record) { mutableStateOf(record?.missedVolume?.let { formatNumber(it) } ?: "") }
     var note by remember(record) { mutableStateOf(record?.note ?: "") }
 
-    // 使用 derivedStateOf 避免每次界面小改动都反复 parse 文本
-    val volumeValue by remember(volume) { derivedStateOf { volume.toDoubleOrNull() } }
-    val amountValue by remember(amount) { derivedStateOf { amount.toDoubleOrNull() } }
-    val unitPriceValue by remember(unitPrice) { derivedStateOf { unitPrice.toDoubleOrNull() } }
-    val remainingFuelValue by remember(remainingFuel) { derivedStateOf { remainingFuel.toDoubleOrNull() } }
+    // 修复：保存按钮防抖状态
+    var isSaving by remember { mutableStateOf(false) }
 
+    // 使用 derivedStateOf 避免每次界面小改动都反复 parse 文本
+    val volumeValue by remember(volume) { derivedStateOf { volume.toDoubleOrNull()?.takeIf { it > 0 } } }
+    val amountValue by remember(amount) { derivedStateOf { amount.toDoubleOrNull()?.takeIf { it >= 0 } } }
+    val unitPriceValue by remember(unitPrice) { derivedStateOf { unitPrice.toDoubleOrNull()?.takeIf { it > 0 } } }
+    val remainingFuelValue by remember(remainingFuel) { derivedStateOf { remainingFuel.toDoubleOrNull()?.takeIf { it >= 0 } } }
+
+    // 修复：漏记油量增加 > 0 校验
     val missedOdometerValue by remember(missedOdometer) { derivedStateOf { missedOdometer.toDoubleOrNull()?.takeIf { it > 0 } } }
-    val missedVolumeValue by remember(missedVolume) { derivedStateOf { missedVolume.toDoubleOrNull() } }
+    val missedVolumeValue by remember(missedVolume) { derivedStateOf { missedVolume.toDoubleOrNull()?.takeIf { it > 0 } } }
 
     // 判断加油量是否超出油箱容量
     val isVolumeExceedsCapacity by remember(volumeValue, tankCapacity) {
@@ -153,8 +164,8 @@ fun FuelScreen(
 
     val isFormValid by remember(isVolumeValid, amountValue, unitPriceValue, fuelGrade, isMissedValid) {
         derivedStateOf {
-            isVolumeValid && amountValue != null && amountValue!! >= 0 &&
-                    unitPriceValue != null && unitPriceValue!! > 0 &&
+            isVolumeValid && amountValue != null &&
+                    unitPriceValue != null &&
                     fuelGrade.isNotBlank() && isMissedValid
         }
     }
@@ -163,8 +174,8 @@ fun FuelScreen(
     fun onVolumeChange(newVol: String) {
         volume = newVol
         val v = newVol.toDoubleOrNull()
-        val p = unitPrice.toDoubleOrNull()
-        if (v != null && v > 0 && p != null && p > 0) {
+        val p = unitPriceValue
+        if (v != null && v > 0 && p != null) {
             val total = v * p
             val disc = discount.toDoubleOrNull() ?: 0.0
             totalAmount = formatNumber(total)
@@ -175,26 +186,19 @@ fun FuelScreen(
     fun onUnitPriceChange(newPrice: String) {
         unitPrice = newPrice
         val p = newPrice.toDoubleOrNull()
-        val amt = amount.toDoubleOrNull()
-        val vol = volume.toDoubleOrNull()
-        val disc = discount.toDoubleOrNull() ?: 0.0
-        if (p != null && p > 0) {
-            if (amt != null && amt > 0) {
-                val total = amt + disc
-                totalAmount = formatNumber(total)
-                volume = formatNumber(total / p)
-            } else if (vol != null && vol > 0) {
-                val total = vol * p
-                totalAmount = formatNumber(total)
-                amount = formatNumber((total - disc).coerceAtLeast(0.0))
-            }
+        val vol = volumeValue
+        if (p != null && p > 0 && vol != null) {
+            val total = vol * p
+            val disc = discount.toDoubleOrNull() ?: 0.0
+            totalAmount = formatNumber(total)
+            amount = formatNumber((total - disc).coerceAtLeast(0.0))
         }
     }
 
     fun onAmountChange(newAmt: String) {
         amount = newAmt
         val amt = newAmt.toDoubleOrNull()
-        val p = unitPrice.toDoubleOrNull()
+        val p = unitPriceValue
         val disc = discount.toDoubleOrNull() ?: 0.0
         if (amt != null && amt >= 0) {
             val total = amt + disc
@@ -208,7 +212,7 @@ fun FuelScreen(
     fun onTotalAmountChange(newTotal: String) {
         totalAmount = newTotal
         val total = newTotal.toDoubleOrNull()
-        val p = unitPrice.toDoubleOrNull()
+        val p = unitPriceValue
         val disc = discount.toDoubleOrNull() ?: 0.0
         if (total != null && total >= 0) {
             amount = formatNumber((total - disc).coerceAtLeast(0.0))
@@ -223,7 +227,7 @@ fun FuelScreen(
         val disc = newDisc.toDoubleOrNull() ?: 0.0
         val total = totalAmount.toDoubleOrNull()
         val amt = amount.toDoubleOrNull()
-        val p = unitPrice.toDoubleOrNull()
+        val p = unitPriceValue
 
         if (total != null) {
             amount = formatNumber((total - disc).coerceAtLeast(0.0))
@@ -279,6 +283,9 @@ fun FuelScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(padding)
+                // 修复：添加 IME 和导航栏 Padding，防止键盘遮挡底部按钮
+                .imePadding()
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -401,7 +408,7 @@ fun FuelScreen(
                             onValueChange = { odometer = it },
                             label = "当前公里数",
                             suffix = "km",
-                            keyboardType = KeyboardType.Decimal, // 优化：里程数改为 Decimal
+                            keyboardType = KeyboardType.Decimal,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -482,7 +489,7 @@ fun FuelScreen(
 
             val vVal = volumeValue
             val pVal = unitPriceValue
-            if (vVal != null && vVal > 0 && pVal != null && pVal > 0) {
+            if (vVal != null && pVal != null) {
                 val total = vVal * pVal
                 val disc = discount.toDoubleOrNull() ?: 0.0
                 val paid = (total - disc).coerceAtLeast(0.0)
@@ -505,6 +512,9 @@ fun FuelScreen(
                             isFull = checked
                             if (checked && tankCapacity > 0) {
                                 remainingFuel = formatNumber(tankCapacity)
+                            } else if (!checked) {
+                                // 修复：取消勾选时清空剩余油量，防止产生矛盾数据
+                                remainingFuel = ""
                             }
                         }
                     )
@@ -561,56 +571,65 @@ fun FuelScreen(
             // 保存按钮
             Button(
                 onClick = {
-                    val odo = odometer.toDoubleOrNull()?.takeIf { it > 0 }
-                    val vol = volumeValue ?: return@Button
-                    val amt = amountValue ?: return@Button
-                    val price = unitPriceValue ?: return@Button
+                    if (isSaving) return@Button
+                    isSaving = true
 
-                    val recordToSave = if (isEditMode) {
-                        record.copy(
-                            timestamp = timestamp,
-                            fuelGrade = fuelGrade,
-                            odometer = odo,
-                            volume = vol,
-                            totalAmount = totalAmount.toDoubleOrNull(),
-                            discount = discount.toDoubleOrNull(),
-                            actualPaidAmount = amt,
-                            unitPrice = price,
-                            remainingFuel = remainingFuelValue,
-                            isFull = isFull,
-                            hasMissedRecord = hasMissedRecord,
-                            missedOdometer = missedOdometerValue,
-                            missedVolume = missedVolumeValue,
-                            note = note.trim()
-                        )
-                    } else {
-                        FuelRecord(
-                            vehicleId = currentVehicle.id,
-                            timestamp = timestamp,
-                            fuelGrade = fuelGrade,
-                            odometer = odo,
-                            volume = vol,
-                            totalAmount = totalAmount.toDoubleOrNull(),
-                            discount = discount.toDoubleOrNull(),
-                            actualPaidAmount = amt,
-                            unitPrice = price,
-                            remainingFuel = remainingFuelValue,
-                            isFull = isFull,
-                            hasMissedRecord = hasMissedRecord,
-                            missedOdometer = missedOdometerValue,
-                            missedVolume = missedVolumeValue,
-                            note = note.trim()
-                        )
-                    }
+                    scope.launch {
+                        try {
+                            val odo = odometer.toDoubleOrNull()?.takeIf { it > 0 }
+                            val vol = volumeValue ?: return@launch
+                            val amt = amountValue ?: return@launch
+                            val price = unitPriceValue ?: return@launch
 
-                    if (isEditMode) {
-                        viewModel.updateFuelRecord(recordToSave)
-                    } else {
-                        viewModel.addFuelRecord(recordToSave)
+                            val recordToSave = if (isEditMode) {
+                                record.copy(
+                                    timestamp = timestamp,
+                                    fuelGrade = fuelGrade,
+                                    odometer = odo,
+                                    volume = vol,
+                                    totalAmount = totalAmount.toDoubleOrNull(),
+                                    discount = discount.toDoubleOrNull(),
+                                    actualPaidAmount = amt,
+                                    unitPrice = price,
+                                    remainingFuel = remainingFuelValue,
+                                    isFull = isFull,
+                                    hasMissedRecord = hasMissedRecord,
+                                    missedOdometer = missedOdometerValue,
+                                    missedVolume = missedVolumeValue,
+                                    note = note.trim()
+                                )
+                            } else {
+                                FuelRecord(
+                                    vehicleId = currentVehicle.id,
+                                    timestamp = timestamp,
+                                    fuelGrade = fuelGrade,
+                                    odometer = odo,
+                                    volume = vol,
+                                    totalAmount = totalAmount.toDoubleOrNull(),
+                                    discount = discount.toDoubleOrNull(),
+                                    actualPaidAmount = amt,
+                                    unitPrice = price,
+                                    remainingFuel = remainingFuelValue,
+                                    isFull = isFull,
+                                    hasMissedRecord = hasMissedRecord,
+                                    missedOdometer = missedOdometerValue,
+                                    missedVolume = missedVolumeValue,
+                                    note = note.trim()
+                                )
+                            }
+
+                            if (isEditMode) {
+                                viewModel.updateFuelRecord(recordToSave)
+                            } else {
+                                viewModel.addFuelRecord(recordToSave)
+                            }
+                            onSaved()
+                        } finally {
+                            isSaving = false
+                        }
                     }
-                    onSaved()
                 },
-                enabled = isFormValid,
+                enabled = isFormValid && !isSaving,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(25.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -756,7 +775,7 @@ private fun MiuixCheckRow(checked: Boolean, text: String, onChecked: (Boolean) -
     ) {
         Checkbox(
             checked = checked,
-            onCheckedChange = null, // 优化：设为 null，避免复选框与外层 Row 点击冲突
+            onCheckedChange = null,
             colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
         )
         Spacer(Modifier.width(8.dp))
@@ -859,7 +878,6 @@ private fun buildMonthGrid(year: Int, month: Int): List<DayCell> {
 
     val cells = mutableListOf<DayCell>()
 
-    // 前置补位: 上个月末尾(灰色), 只用于对齐第一行
     val prevCal = cal.clone() as Calendar
     prevCal.add(Calendar.DAY_OF_MONTH, -firstDayOfWeek)
     repeat(firstDayOfWeek) {
@@ -874,7 +892,6 @@ private fun buildMonthGrid(year: Int, month: Int): List<DayCell> {
         prevCal.add(Calendar.DAY_OF_MONTH, 1)
     }
 
-    // 本月
     for (d in 1..daysInMonth) {
         cells.add(DayCell(year, month, d, true))
     }
@@ -910,7 +927,6 @@ private fun MiuiCalendar(
 
     Column(modifier = Modifier.fillMaxWidth()) {
 
-        // 月份切换栏
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -944,7 +960,6 @@ private fun MiuiCalendar(
             }
         }
 
-        // 星期行
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf("日", "一", "二", "三", "四", "五", "六").forEach { w ->
                 Box(
@@ -961,7 +976,6 @@ private fun MiuiCalendar(
             }
         }
 
-        // 日期网格
         val rowCount = (cells.size + 6) / 7
         for (row in 0 until rowCount) {
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -1233,7 +1247,6 @@ private fun HyperDatePickerDialog(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 16.dp)
         ) {
-            // 顶部工具栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1270,7 +1283,6 @@ private fun HyperDatePickerDialog(
 
             Spacer(Modifier.height(2.dp))
 
-            // 月历
             MiuiCalendar(
                 displayYear = displayYear,
                 displayMonth = displayMonth,
@@ -1291,7 +1303,6 @@ private fun HyperDatePickerDialog(
 
             Spacer(Modifier.height(4.dp))
 
-            // 时分滚轮
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1317,7 +1328,6 @@ private fun HyperDatePickerDialog(
             }
         }
 
-        // 年月选择弹窗 (嵌套在 sheet 内)
         if (showYearMonthDialog) {
             HyperYearMonthPickerDialog(
                 initialYear = displayYear,
@@ -1360,8 +1370,8 @@ private fun <T> HyperWheelList(
 
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+    val scope = rememberCoroutineScope()
 
-    // 优化防抖：使用 snapshotFlow 仅在滚动停止时触发状态改变，避免连续更新导致滑动抖动
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }
             .collect { isScrolling ->
@@ -1376,11 +1386,13 @@ private fun <T> HyperWheelList(
             }
     }
 
-    // 当外部 selectedValue 改变时同步滚轮位置
+    // 修复：当外部 selectedValue 改变时同步滚轮位置，使用 animateScrollToItem 并仅在非滚动时触发
     LaunchedEffect(selectedValue, items) {
         val targetIndex = items.indexOf(selectedValue).coerceAtLeast(0)
-        if (targetIndex in items.indices && targetIndex != listState.firstVisibleItemIndex) {
-            listState.scrollToItem(targetIndex)
+        if (targetIndex in items.indices && !listState.isScrollInProgress) {
+            scope.launch {
+                listState.animateScrollToItem(targetIndex)
+            }
         }
     }
 
